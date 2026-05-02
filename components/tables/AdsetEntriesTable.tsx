@@ -233,7 +233,7 @@ export function AdsetEntriesTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-surface [scrollbar-gutter:stable]">
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface pb-3">
         <Table>
           <TableHeader>
             <TableRow>
