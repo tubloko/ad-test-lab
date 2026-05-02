@@ -37,11 +37,16 @@ import {
   type DateRangePreset,
 } from '@/lib/utils/dateRange';
 import { cn } from '@/lib/utils';
+import { ADSET_GRID_COLUMNS } from './AdsetEntriesTable.shared';
+import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import type { AdsetEntry, AdsetEntryInput } from '@/types/entry';
 
 interface AdsetEntriesTableProps {
   entries: AdsetEntry[];
   timezone: string;
+  /** When true, the in-table TOTAL footer row is suppressed because the
+   *  caller renders an external AdsetTotalsRow above the table. */
+  hideTotalsRow?: boolean;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
 }
@@ -86,6 +91,7 @@ interface ExtraRow {
 export function AdsetEntriesTable({
   entries,
   timezone,
+  hideTotalsRow = false,
   onSaveEntry,
   onDeleteEntry,
 }: AdsetEntriesTableProps) {
@@ -178,27 +184,13 @@ export function AdsetEntriesTable({
     colCount: EDITABLE_COLS.length,
   });
 
-  const totals = useMemo(() => {
-    const acc = filtered.reduce(
-      (a, e) => ({
-        spend: a.spend + e.spend,
-        clicks: a.clicks + e.clicks,
-        lpv: a.lpv + e.lpv,
-        atc: a.atc + e.atc,
-        ic: a.ic + e.ic,
-        purchases: a.purchases + (e.purchases ?? 0),
-      }),
-      { spend: 0, clicks: 0, lpv: 0, atc: 0, ic: 0, purchases: 0 },
-    );
-    return {
-      ...acc,
-      cpc: acc.clicks > 0 ? acc.spend / acc.clicks : 0,
-      lpvRate: lpvRate(acc.lpv, acc.clicks),
-      atcRate: atcRate(acc.atc, acc.lpv),
-      icRate: icFromLPV(acc.ic, acc.lpv),
-      purchaseRate: convFromLPV(acc.purchases, acc.lpv),
-    };
-  }, [filtered]);
+  // Use the shared totals helper so the in-table footer (when shown) and
+  // the always-visible AdsetTotalsRow (in the accordion) compute the
+  // exact same numbers.
+  const totals = useMemo(
+    () => computeAdsetTotals(filtered, { from: fromDate, to: today }),
+    [filtered, fromDate, today],
+  );
 
   useEffect(() => {
     if (!pendingFocusDate) return;
@@ -232,8 +224,13 @@ export function AdsetEntriesTable({
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface">
-        <Table>
+      <div className="overflow-x-auto">
+        <Table className="table-fixed">
+          <colgroup>
+            {ADSET_GRID_COLUMNS.map((c) => (
+              <col key={c.key} style={{ width: `${c.width}px` }} />
+            ))}
+          </colgroup>
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
@@ -280,20 +277,30 @@ export function AdsetEntriesTable({
               ),
             )}
           </TableBody>
-          {filtered.length > 0 && (
+          {!hideTotalsRow && filtered.length > 0 && (
             <TableFooter>
               <TableRow className="bg-elevated">
                 <TableCell className="text-subheading text-text">Total</TableCell>
                 <TableCell className="text-right text-mono text-text">
-                  {formatCurrency(totals.spend)}
+                  {formatCurrency(totals.totalSpend)}
                 </TableCell>
-                <TableCell className="text-right text-mono text-text">{totals.clicks}</TableCell>
-                <TableCell className="text-right text-mono text-text">{totals.lpv}</TableCell>
-                <TableCell className="text-right text-mono text-text">{totals.atc}</TableCell>
-                <TableCell className="text-right text-mono text-text">{totals.ic}</TableCell>
-                <TableCell className="text-right text-mono text-text">{totals.purchases}</TableCell>
                 <TableCell className="text-right text-mono text-text">
-                  {totals.clicks > 0 ? formatCurrency(totals.cpc) : '—'}
+                  {totals.totalClicks}
+                </TableCell>
+                <TableCell className="text-right text-mono text-text">
+                  {totals.totalLPV}
+                </TableCell>
+                <TableCell className="text-right text-mono text-text">
+                  {totals.totalATC}
+                </TableCell>
+                <TableCell className="text-right text-mono text-text">
+                  {totals.totalIC}
+                </TableCell>
+                <TableCell className="text-right text-mono text-text">
+                  {totals.totalPurchases}
+                </TableCell>
+                <TableCell className="text-right text-mono text-text">
+                  {totals.totalClicks > 0 ? formatCurrency(totals.cpc) : '—'}
                 </TableCell>
                 <TableCell className="text-right text-mono text-text-muted">—</TableCell>
                 <TableCell
@@ -302,7 +309,7 @@ export function AdsetEntriesTable({
                     TONE_TEXT_CLASS[rateTone(totals.lpvRate, HEALTHY_LPV_RATE)],
                   )}
                 >
-                  {totals.clicks > 0 ? formatPercent(totals.lpvRate) : '—'}
+                  {totals.totalClicks > 0 ? formatPercent(totals.lpvRate) : '—'}
                 </TableCell>
                 <TableCell
                   className={cn(
@@ -310,27 +317,27 @@ export function AdsetEntriesTable({
                     TONE_TEXT_CLASS[rateTone(totals.atcRate, HEALTHY_ATC_RATE)],
                   )}
                 >
-                  {totals.lpv > 0 ? formatPercent(totals.atcRate) : '—'}
+                  {totals.totalLPV > 0 ? formatPercent(totals.atcRate) : '—'}
                 </TableCell>
                 <TableCell
                   className={cn(
                     'text-right text-mono',
-                    totals.lpv > 0
+                    totals.totalLPV > 0
                       ? TONE_TEXT_CLASS[rateTone(totals.icRate, HEALTHY_IC_FROM_LPV)]
                       : 'text-text-muted',
                   )}
                 >
-                  {totals.lpv > 0 ? formatPercent(totals.icRate) : '—'}
+                  {totals.totalLPV > 0 ? formatPercent(totals.icRate) : '—'}
                 </TableCell>
                 <TableCell
                   className={cn(
                     'text-right text-mono',
-                    totals.lpv > 0
+                    totals.totalLPV > 0
                       ? TONE_TEXT_CLASS[rateTone(totals.purchaseRate, HEALTHY_CONV_FROM_LPV)]
                       : 'text-text-muted',
                   )}
                 >
-                  {totals.lpv > 0 ? formatPercent(totals.purchaseRate) : '—'}
+                  {totals.totalLPV > 0 ? formatPercent(totals.purchaseRate) : '—'}
                 </TableCell>
                 <TableCell />
                 <TableCell />
