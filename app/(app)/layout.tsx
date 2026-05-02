@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { signOutUser } from '@/lib/firebase/auth';
 import { useUser } from '@/hooks/useUser';
+import { useAuthBootstrap } from '@/hooks/useAuthBootstrap';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: user, loading } = useUser();
   const router = useRouter();
+  useAuthBootstrap();
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');

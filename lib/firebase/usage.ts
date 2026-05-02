@@ -1,6 +1,7 @@
 import 'server-only';
 import { adminDb } from './admin';
 import { paths } from './paths';
+import { todayInTimezone } from '@/lib/utils/date';
 
 export const DAILY_DIAGNOSIS_LIMIT = 5;
 
@@ -9,11 +10,6 @@ export interface UsageResult {
   used: number;
   remaining: number;
   limit: number;
-}
-
-function todayInTimezone(timezone: string): string {
-  // 'en-CA' yields YYYY-MM-DD output; timeZone option does the conversion.
-  return new Date().toLocaleDateString('en-CA', { timeZone: timezone });
 }
 
 export async function checkAndIncrementUsage(uid: string): Promise<UsageResult> {
