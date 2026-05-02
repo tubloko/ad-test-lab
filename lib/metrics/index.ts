@@ -6,6 +6,8 @@ export { lpvRate } from './lpvRate';
 export { atcRate } from './atcRate';
 export { icRate } from './icRate';
 export { purchaseRate } from './purchaseRate';
+export { icFromLPV } from './icFromLPV';
+export { convFromLPV } from './convFromLPV';
 export {
   aggregateAdsetEntries,
   aggregateCampaignForVerdict,

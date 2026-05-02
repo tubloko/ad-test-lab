@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
-import { lpvRate, atcRate, icRate, purchaseRate } from '@/lib/metrics';
+import { lpvRate, atcRate, icFromLPV, convFromLPV } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatPercent } from '@/lib/utils/formatPercent';
 import { todayInTimezone, dayBefore } from '@/lib/utils/date';
@@ -24,7 +24,6 @@ import {
   rateTone,
   HEALTHY_LPV_RATE,
   HEALTHY_ATC_RATE,
-  HEALTHY_IC_RATE,
   TONE_TEXT_CLASS,
 } from '@/lib/utils/threshold-color';
 import {
@@ -154,8 +153,8 @@ export function AdsetEntriesTable({
       cpc: acc.clicks > 0 ? acc.spend / acc.clicks : 0,
       lpvRate: lpvRate(acc.lpv, acc.clicks),
       atcRate: atcRate(acc.atc, acc.lpv),
-      icRate: icRate(acc.ic, acc.atc),
-      purchaseRate: purchaseRate(acc.purchases, acc.ic),
+      icRate: icFromLPV(acc.ic, acc.lpv),
+      purchaseRate: convFromLPV(acc.purchases, acc.lpv),
     };
   }, [filtered]);
 
@@ -278,16 +277,11 @@ export function AdsetEntriesTable({
                 >
                   {totals.lpv > 0 ? formatPercent(totals.atcRate) : '—'}
                 </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    TONE_TEXT_CLASS[rateTone(totals.icRate, HEALTHY_IC_RATE)],
-                  )}
-                >
-                  {totals.atc > 0 ? formatPercent(totals.icRate) : '—'}
+                <TableCell className="text-right text-mono text-text">
+                  {totals.lpv > 0 ? formatPercent(totals.icRate) : '—'}
                 </TableCell>
                 <TableCell className="text-right text-mono text-text">
-                  {totals.ic > 0 ? formatPercent(totals.purchaseRate) : '—'}
+                  {totals.lpv > 0 ? formatPercent(totals.purchaseRate) : '—'}
                 </TableCell>
                 <TableCell />
                 <TableCell />
@@ -602,8 +596,10 @@ function Row({
   const cpc = clicks > 0 ? spend / clicks : 0;
   const lpvR = lpvRate(lpv, clicks);
   const atcR = atcRate(atc, lpv);
-  const icR = icRate(ic, atc);
-  const convR = purchaseRate(purchases, ic);
+  // IC% and Conv% are now relative to landing-page views — same denominator
+  // as ATC% — so the funnel stages compare against one consistent base.
+  const icR = icFromLPV(ic, lpv);
+  const convR = convFromLPV(purchases, lpv);
 
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
@@ -666,18 +662,18 @@ function Row({
       <TableCell
         className={cn(
           'text-right text-mono',
-          atc > 0 ? TONE_TEXT_CLASS[rateTone(icR, HEALTHY_IC_RATE)] : 'text-text-muted',
+          lpv > 0 ? 'text-text' : 'text-text-muted',
         )}
       >
-        {atc > 0 ? formatPercent(icR) : '—'}
+        {lpv > 0 ? formatPercent(icR) : '—'}
       </TableCell>
       <TableCell
         className={cn(
           'text-right text-mono',
-          ic > 0 ? 'text-text' : 'text-text-muted',
+          lpv > 0 ? 'text-text' : 'text-text-muted',
         )}
       >
-        {ic > 0 ? formatPercent(convR) : '—'}
+        {lpv > 0 ? formatPercent(convR) : '—'}
       </TableCell>
 
       <TableCell className="w-8 text-center">

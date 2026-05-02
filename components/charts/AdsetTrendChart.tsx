@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { lpvRate, atcRate, icRate, purchaseRate } from '@/lib/metrics';
+import { lpvRate, atcRate, icFromLPV, convFromLPV } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatPercent } from '@/lib/utils/formatPercent';
 import { formatDate } from '@/lib/utils/formatDate';
@@ -66,14 +66,14 @@ const METRICS: MetricDef[] = [
     label: 'IC%',
     format: (v) => formatPercent(v),
     yTickFormatter: (v) => `${v}%`,
-    compute: (e) => (e.atc > 0 ? icRate(e.ic, e.atc) : null),
+    compute: (e) => (e.lpv > 0 ? icFromLPV(e.ic, e.lpv) : null),
   },
   {
     key: 'convRate',
     label: 'Conv%',
     format: (v) => formatPercent(v),
     yTickFormatter: (v) => `${v}%`,
-    compute: (e) => (e.ic > 0 ? purchaseRate(e.purchases ?? 0, e.ic) : null),
+    compute: (e) => (e.lpv > 0 ? convFromLPV(e.purchases ?? 0, e.lpv) : null),
   },
   {
     key: 'spend',
