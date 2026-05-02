@@ -7,21 +7,19 @@ import { useCallback, useRef, type KeyboardEvent } from 'react';
  *
  * - Tab / Shift+Tab → next / previous cell on the same row
  * - Enter / Shift+Enter → next / previous cell in the same column
- * - ArrowUp / ArrowDown → previous / next cell in the same column (always)
- * - ArrowLeft / ArrowRight → previous / next cell on the same row, but
- *   ONLY when the caret is at the boundary of the input value. Otherwise
- *   the arrow moves the caret within the input as normal — same as
- *   Google Sheets in cell-edit mode.
+ * - ArrowUp / ArrowDown → previous / next cell in the same column
+ * - ArrowLeft / ArrowRight → previous / next cell on the same row
  * - Esc → blur and let the caller revert
  * - Cmd/Ctrl+Enter → save and stay
+ *
+ * Caveat: arrow keys always navigate cells (no caret movement inside the
+ * input). type="number" inputs don't expose selectionStart/End reliably,
+ * so boundary detection is unreliable in practice. To edit the middle of
+ * a multi-character value, click into it or use Home/End.
  *
  * Caller wires it up by:
  *   1. Calling getRef(row, col) for every input's `ref` prop.
  *   2. Calling onKeyDown(row, col)(event) on every input's `onKeyDown`.
- *   3. Optionally calling focusCell(row, col) to programmatically jump.
- *
- * Coordinates are caller-defined — typically row = entry index (0 = top
- * "today" row, 1..N = existing entries) and col = field index in the row.
  */
 export interface GridNavigation {
   getRef: (row: number, col: number) => (el: HTMLInputElement | null) => void;
@@ -39,30 +37,6 @@ interface UseGridNavigationArgs {
   onSave?: (row: number, col: number) => void;
   /** Optional escape handler — called when user hits Esc. */
   onEscape?: (row: number, col: number) => void;
-}
-
-function caretAtStart(el: HTMLInputElement): boolean {
-  // Numeric inputs don't expose selection, so getter throws or returns null.
-  // When that happens, treat the input as boundary-everywhere — arrow keys
-  // act as cell navigation.
-  try {
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    return start === 0 && end === 0;
-  } catch {
-    return true;
-  }
-}
-
-function caretAtEnd(el: HTMLInputElement): boolean {
-  try {
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const len = el.value.length;
-    return start === len && end === len;
-  } catch {
-    return true;
-  }
 }
 
 export function useGridNavigation({
@@ -98,7 +72,6 @@ export function useGridNavigation({
   const onKeyDown = useCallback(
     (row: number, col: number) =>
       (event: KeyboardEvent<HTMLInputElement>) => {
-        const target = event.currentTarget;
         const k = event.key;
 
         if (k === 'Tab') {
@@ -139,15 +112,17 @@ export function useGridNavigation({
           return;
         }
 
-        if (k === 'ArrowLeft' && caretAtStart(target)) {
+        if (k === 'ArrowLeft') {
           event.preventDefault();
           if (col - 1 >= 0) focusCell(row, col - 1);
+          else if (row - 1 >= 0) focusCell(row - 1, colCount - 1);
           return;
         }
 
-        if (k === 'ArrowRight' && caretAtEnd(target)) {
+        if (k === 'ArrowRight') {
           event.preventDefault();
           if (col + 1 < colCount) focusCell(row, col + 1);
+          else if (row + 1 < rowCount) focusCell(row + 1, 0);
           return;
         }
 
