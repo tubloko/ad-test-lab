@@ -27,18 +27,6 @@ export default function LoginPage() {
   const { loading, error, signInWithGoogle, signInWithEmail, signUpWithEmail } =
     useLogin();
 
-  useEffect(() => {
-    if (!userLoading && user) router.replace('/');
-  }, [user, userLoading, router]);
-
-  if (userLoading || user) {
-    return (
-      <main className="flex min-h-svh items-center justify-center bg-bg text-text-muted">
-        Loading…
-      </main>
-    );
-  }
-
   const {
     register,
     handleSubmit,
@@ -48,12 +36,24 @@ export default function LoginPage() {
     defaultValues: { email: '', password: '' },
   });
 
+  useEffect(() => {
+    if (!userLoading && user) router.replace('/');
+  }, [user, userLoading, router]);
+
   const onSubmit = ({ email, password }: CredentialsValues) =>
     mode === 'signin'
       ? signInWithEmail(email, password)
       : signUpWithEmail(email, password);
 
   const isSignUp = mode === 'signup';
+
+  if (userLoading || user) {
+    return (
+      <main className="flex min-h-svh items-center justify-center bg-bg text-text-muted">
+        Loading…
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-bg p-6">
