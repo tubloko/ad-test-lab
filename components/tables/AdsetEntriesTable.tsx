@@ -233,7 +233,7 @@ export function AdsetEntriesTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-surface pb-3">
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
         <Table>
           <TableHeader>
             <TableRow>
@@ -283,7 +283,10 @@ export function AdsetEntriesTable({
           </TableBody>
           {filtered.length > 0 && (
             <TableFooter>
-              <TableRow className="bg-elevated">
+              {/* pb-5 on every cell so the horizontal scrollbar that
+                  shadcn's Table renders along the table's bottom edge
+                  has its own gutter below the totals text. */}
+              <TableRow className="bg-elevated [&>td]:pb-5">
                 <TableCell className="text-subheading text-text">Total</TableCell>
                 <TableCell className="text-right text-mono text-text">
                   {formatCurrency(totals.totalSpend)}

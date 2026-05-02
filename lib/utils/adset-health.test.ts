@@ -11,7 +11,7 @@ describe('adsetHealth', () => {
   });
 
   it('returns healthy when all three beat thresholds', () => {
-    expect(adsetHealth({ ctr: 1.5, lpvRate: 80, atcRate: 6 })).toBe('healthy');
+    expect(adsetHealth({ ctr: 3.5, lpvRate: 80, atcRate: 6 })).toBe('healthy');
   });
 
   it('returns warning when exactly one rate is below threshold', () => {

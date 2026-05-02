@@ -31,12 +31,11 @@ export const THRESHOLDS = {
   KILL_CPA_MULTIPLIER: 2.0,
 
   /**
-   * Healthy CTR (%) — link clicks / impressions. Display-only for now;
-   * we don't track impressions in entries yet, so this only kicks in
-   * once the user starts entering CTR-driving data. ~1.0% is a common
-   * floor for cold acquisition feeds.
+   * Healthy CTR (%). For cold acquisition Meta feeds, ≥3% is healthy,
+   * 1.5–3% is mediocre, <1.5% is poor. Display threshold; the verdict
+   * engine doesn't use it directly.
    */
-  HEALTHY_CTR: 1.0,
+  HEALTHY_CTR: 3.0,
 
   /**
    * Healthy LPV / Clicks rate (%). Below this means the landing page

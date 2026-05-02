@@ -44,10 +44,19 @@ export function cpcTone(cpc: number): ThresholdTone {
   return 'danger';
 }
 
-/** rateTone(value, HEALTHY_CTR) — wrapper for symmetry with the others. */
+/**
+ * CTR % bands (Meta link CTR for cold acquisition):
+ *   ≥ 3.0  success
+ *   ≥ 1.5  warning
+ *   <1.5  danger
+ * Doesn't reuse rateTone's `healthy * 0.7` warning floor because the
+ * warning band needs to start at half the healthy value here.
+ */
 export function ctrTone(ctr: number): ThresholdTone {
   if (ctr <= 0) return 'neutral';
-  return rateTone(ctr, HEALTHY_CTR);
+  if (ctr >= 3) return 'success';
+  if (ctr >= 1.5) return 'warning';
+  return 'danger';
 }
 export function lpvRateTone(rate: number): ThresholdTone {
   if (rate <= 0) return 'neutral';
