@@ -27,6 +27,8 @@ import {
   rateTone,
   HEALTHY_LPV_RATE,
   HEALTHY_ATC_RATE,
+  HEALTHY_IC_FROM_LPV,
+  HEALTHY_CONV_FROM_LPV,
   TONE_TEXT_CLASS,
 } from '@/lib/utils/threshold-color';
 import {
@@ -310,10 +312,24 @@ export function AdsetEntriesTable({
                 >
                   {totals.lpv > 0 ? formatPercent(totals.atcRate) : '—'}
                 </TableCell>
-                <TableCell className="text-right text-mono text-text">
+                <TableCell
+                  className={cn(
+                    'text-right text-mono',
+                    totals.lpv > 0
+                      ? TONE_TEXT_CLASS[rateTone(totals.icRate, HEALTHY_IC_FROM_LPV)]
+                      : 'text-text-muted',
+                  )}
+                >
                   {totals.lpv > 0 ? formatPercent(totals.icRate) : '—'}
                 </TableCell>
-                <TableCell className="text-right text-mono text-text">
+                <TableCell
+                  className={cn(
+                    'text-right text-mono',
+                    totals.lpv > 0
+                      ? TONE_TEXT_CLASS[rateTone(totals.purchaseRate, HEALTHY_CONV_FROM_LPV)]
+                      : 'text-text-muted',
+                  )}
+                >
                   {totals.lpv > 0 ? formatPercent(totals.purchaseRate) : '—'}
                 </TableCell>
                 <TableCell />
@@ -678,7 +694,7 @@ function Row({
       <TableCell
         className={cn(
           'text-right text-mono',
-          lpv > 0 ? 'text-text' : 'text-text-muted',
+          lpv > 0 ? TONE_TEXT_CLASS[rateTone(icR, HEALTHY_IC_FROM_LPV)] : 'text-text-muted',
         )}
       >
         {lpv > 0 ? formatPercent(icR) : '—'}
@@ -686,7 +702,7 @@ function Row({
       <TableCell
         className={cn(
           'text-right text-mono',
-          lpv > 0 ? 'text-text' : 'text-text-muted',
+          lpv > 0 ? TONE_TEXT_CLASS[rateTone(convR, HEALTHY_CONV_FROM_LPV)] : 'text-text-muted',
         )}
       >
         {lpv > 0 ? formatPercent(convR) : '—'}
