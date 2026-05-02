@@ -55,7 +55,7 @@ export function AdsetForm({
   });
 
   const funnelStage = watch('funnelStage') ?? 'TOF';
-  const audience = watch('audience') ?? '';
+  const audience = watch('audience');
   const budget = watch('budget');
 
   return (
@@ -83,12 +83,14 @@ export function AdsetForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="audience">Audience</Label>
+        <Label htmlFor="audience">Audience (optional)</Label>
         <Input
           id="audience"
           placeholder="e.g. LAL 3% purchasers"
           aria-invalid={Boolean(errors.audience)}
-          {...register('audience')}
+          {...register('audience', {
+            setValueAs: (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+          })}
         />
         {errors.audience && (
           <p className="text-caption text-danger-text">{errors.audience.message}</p>

@@ -8,7 +8,7 @@ export const AdsetStatusSchema = z.enum(ADSET_STATUSES);
 
 export const AdsetInputSchema = z.object({
   name: z.string().trim().min(1).max(200),
-  audience: z.string().trim().min(1).max(60),
+  audience: z.string().trim().max(60).optional(),
   funnelStage: FunnelStageSchema,
   budget: z.number().positive(),
   status: AdsetStatusSchema.optional(),

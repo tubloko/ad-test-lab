@@ -9,7 +9,7 @@ import type { FunnelStage } from '@/types/adset';
 interface AdsetNameBuilderProps {
   productName: string;
   funnelStage: FunnelStage;
-  audience: string;
+  audience: string | undefined;
   budget: number | undefined;
   onApply: (name: string) => void;
 }
@@ -28,7 +28,7 @@ export function AdsetNameBuilder({
     prefix,
     funnelStage,
     productName.trim() || 'product',
-    audience.trim() || 'audience',
+    (audience ?? '').trim() || 'audience',
     budget && budget > 0 ? `${budget}$` : 'budget$',
   ].join(' | ');
 

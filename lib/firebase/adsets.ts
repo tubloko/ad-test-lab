@@ -10,6 +10,14 @@ import { db } from './config';
 import { paths } from './paths';
 import type { AdsetInput } from '@/types/adset';
 
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(obj) as (keyof T)[]) {
+    if (obj[k] !== undefined) out[k] = obj[k];
+  }
+  return out;
+}
+
 export async function createAdset(
   uid: string,
   productId: string,
@@ -18,7 +26,7 @@ export async function createAdset(
 ): Promise<string> {
   const ref = collection(db, paths.adsets(uid, productId, campaignId));
   const docRef = await addDoc(ref, {
-    ...input,
+    ...stripUndefined(input),
     productId,
     campaignId,
     status: input.status ?? 'active',
@@ -36,7 +44,7 @@ export async function updateAdset(
   input: Partial<AdsetInput>,
 ): Promise<void> {
   const ref = doc(db, paths.adset(uid, productId, campaignId, adsetId));
-  await updateDoc(ref, { ...input, updatedAt: serverTimestamp() });
+  await updateDoc(ref, { ...stripUndefined(input), updatedAt: serverTimestamp() });
 }
 
 export async function deleteAdset(
