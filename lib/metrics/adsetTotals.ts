@@ -5,15 +5,21 @@ import { isWithinRange } from '@/lib/utils/dateRange';
 export interface AdsetTotals {
   totalSpend: number;
   totalClicks: number;
-  totalImpressions: number; // 0 until we track impressions
   totalLPV: number;
   totalATC: number;
   totalIC: number;
   totalPurchases: number;
 
   cpc: number;
-  /** Clicks / Impressions × 100. 0 when impressions are 0 (we don't track yet). */
+  /**
+   * Range CTR % — clicks-weighted average of per-day CTR. Daily CTR is
+   * entered by the user (we don't track impressions). When weighted by
+   * clicks, this is the closest proxy to the true overall ratio without
+   * needing impression counts.
+   */
   ctr: number;
+  /** True when at least one entry in range has a non-zero CTR. */
+  ctrTracked: boolean;
   /** LPV / Clicks × 100. */
   lpvRate: number;
   /** ATC / LPV × 100. */
@@ -44,6 +50,8 @@ export function computeAdsetTotals(
   let totalATC = 0;
   let totalIC = 0;
   let totalPurchases = 0;
+  let ctrWeightedSum = 0;
+  let ctrSeen = false;
   for (const e of filtered) {
     totalSpend += e.spend;
     totalClicks += e.clicks;
@@ -51,12 +59,14 @@ export function computeAdsetTotals(
     totalATC += e.atc;
     totalIC += e.ic;
     totalPurchases += e.purchases ?? 0;
+    if (e.ctr !== undefined && e.ctr > 0) {
+      ctrSeen = true;
+      ctrWeightedSum += e.ctr * e.clicks;
+    }
   }
 
-  const totalImpressions = 0; // not tracked yet
-
   const cpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
-  const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const ctr = ctrSeen && totalClicks > 0 ? ctrWeightedSum / totalClicks : 0;
 
   const hasData =
     totalSpend > 0 ||
@@ -64,18 +74,19 @@ export function computeAdsetTotals(
     totalLPV > 0 ||
     totalATC > 0 ||
     totalIC > 0 ||
-    totalPurchases > 0;
+    totalPurchases > 0 ||
+    ctrSeen;
 
   return {
     totalSpend,
     totalClicks,
-    totalImpressions,
     totalLPV,
     totalATC,
     totalIC,
     totalPurchases,
     cpc,
     ctr,
+    ctrTracked: ctrSeen,
     lpvRate: lpvRate(totalLPV, totalClicks),
     atcRate: atcRate(totalATC, totalLPV),
     icRate: icFromLPV(totalIC, totalLPV),

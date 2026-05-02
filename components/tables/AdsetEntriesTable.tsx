@@ -25,6 +25,8 @@ import { formatDate } from '@/lib/utils/formatDate';
 import { todayInTimezone, subtractDays } from '@/lib/utils/date';
 import {
   rateTone,
+  cpcTone,
+  ctrTone,
   HEALTHY_LPV_RATE,
   HEALTHY_ATC_RATE,
   HEALTHY_IC_FROM_LPV,
@@ -47,7 +49,16 @@ interface AdsetEntriesTableProps {
   onDeleteEntry: (date: string) => Promise<void>;
 }
 
-const EDITABLE_COLS = ['spend', 'clicks', 'lpv', 'atc', 'ic', 'purchases'] as const;
+// Editable columns, in visual + grid-navigation order.
+const EDITABLE_COLS = [
+  'spend',
+  'ctr',
+  'clicks',
+  'lpv',
+  'atc',
+  'ic',
+  'purchases',
+] as const;
 type EditableField = (typeof EDITABLE_COLS)[number];
 
 interface RowDraft {
@@ -57,6 +68,7 @@ interface RowDraft {
   atc: string;
   ic: string;
   purchases: string;
+  ctr: string;
 }
 
 function toDraft(entry: AdsetEntry): RowDraft {
@@ -67,6 +79,7 @@ function toDraft(entry: AdsetEntry): RowDraft {
     atc: entry.atc ? String(entry.atc) : '',
     ic: entry.ic ? String(entry.ic) : '',
     purchases: entry.purchases ? String(entry.purchases) : '',
+    ctr: entry.ctr ? String(entry.ctr) : '',
   };
 }
 
@@ -77,6 +90,7 @@ const EMPTY_DRAFT: RowDraft = {
   atc: '',
   ic: '',
   purchases: '',
+  ctr: '',
 };
 
 interface ExtraRow {
@@ -219,19 +233,19 @@ export function AdsetEntriesTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface [scrollbar-gutter:stable]">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
               <TableHead className="text-right">Spend</TableHead>
+              <TableHead className="text-right">CTR%</TableHead>
               <TableHead className="text-right">Clicks</TableHead>
               <TableHead className="text-right">LPV</TableHead>
               <TableHead className="text-right">ATC</TableHead>
               <TableHead className="text-right">IC</TableHead>
               <TableHead className="text-right">Purchases</TableHead>
               <TableHead className="text-right">CPC</TableHead>
-              <TableHead className="text-right">CTR%</TableHead>
               <TableHead className="text-right">LPV%</TableHead>
               <TableHead className="text-right">ATC%</TableHead>
               <TableHead className="text-right">IC%</TableHead>
@@ -274,6 +288,21 @@ export function AdsetEntriesTable({
                 <TableCell className="text-right text-mono text-text">
                   {formatCurrency(totals.totalSpend)}
                 </TableCell>
+                <TableCell
+                  className={cn(
+                    'text-right text-mono',
+                    totals.ctrTracked
+                      ? TONE_TEXT_CLASS[ctrTone(totals.ctr)]
+                      : 'text-text-muted',
+                  )}
+                  title={
+                    totals.ctrTracked
+                      ? undefined
+                      : 'Enter CTR per day to compute the total'
+                  }
+                >
+                  {totals.ctrTracked ? formatPercent(totals.ctr) : '—'}
+                </TableCell>
                 <TableCell className="text-right text-mono text-text">
                   {totals.totalClicks}
                 </TableCell>
@@ -289,10 +318,16 @@ export function AdsetEntriesTable({
                 <TableCell className="text-right text-mono text-text">
                   {totals.totalPurchases}
                 </TableCell>
-                <TableCell className="text-right text-mono text-text">
+                <TableCell
+                  className={cn(
+                    'text-right text-mono',
+                    totals.totalClicks > 0
+                      ? TONE_TEXT_CLASS[cpcTone(totals.cpc)]
+                      : 'text-text-muted',
+                  )}
+                >
                   {totals.totalClicks > 0 ? formatCurrency(totals.cpc) : '—'}
                 </TableCell>
-                <TableCell className="text-right text-mono text-text-muted">—</TableCell>
                 <TableCell
                   className={cn(
                     'text-right text-mono',
@@ -376,6 +411,7 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 function buildPayload(next: RowDraft): AdsetEntryInput {
   const purchases = parseNum(next.purchases);
+  const ctr = parseNum(next.ctr);
   return {
     spend: parseNum(next.spend),
     clicks: Math.round(parseNum(next.clicks)),
@@ -383,6 +419,7 @@ function buildPayload(next: RowDraft): AdsetEntryInput {
     atc: Math.round(parseNum(next.atc)),
     ic: Math.round(parseNum(next.ic)),
     ...(purchases > 0 ? { purchases: Math.round(purchases) } : {}),
+    ...(ctr > 0 ? { ctr } : {}),
   };
 }
 
@@ -641,36 +678,44 @@ function Row({
         <DateCell date={date} today={today} showDraftPill={showDraftPill} />
       </TableCell>
 
-      {EDITABLE_COLS.map((field, i) => (
-        <TableCell key={field} className="text-right">
-          <Input
-            ref={grid.getRef(row, i)}
-            type="number"
-            inputMode={field === 'spend' ? 'decimal' : 'numeric'}
-            step={field === 'spend' ? '0.01' : '1'}
-            min={0}
-            value={draft[field]}
-            placeholder="0"
-            onChange={(e) => onChange(field, e.target.value)}
-            onBlur={onBlur}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') onEsc();
-              grid.onKeyDown(row, i)(e);
-            }}
-            aria-label={`${field} on ${ariaDate}`}
-            className="h-8 w-24 px-2 text-right text-mono"
-          />
-        </TableCell>
-      ))}
+      {EDITABLE_COLS.map((field, i) => {
+        const isDecimal = field === 'spend' || field === 'ctr';
+        const isCtr = field === 'ctr';
+        const ctrValue = parseNum(draft.ctr);
+        return (
+          <TableCell key={field} className="text-right">
+            <Input
+              ref={grid.getRef(row, i)}
+              type="number"
+              inputMode={isDecimal ? 'decimal' : 'numeric'}
+              step={isDecimal ? '0.01' : '1'}
+              min={0}
+              max={isCtr ? 100 : undefined}
+              value={draft[field]}
+              placeholder="0"
+              onChange={(e) => onChange(field, e.target.value)}
+              onBlur={onBlur}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') onEsc();
+                grid.onKeyDown(row, i)(e);
+              }}
+              aria-label={`${field} on ${ariaDate}`}
+              className={cn(
+                'h-8 w-24 px-2 text-right text-mono',
+                isCtr && ctrValue > 0 && TONE_TEXT_CLASS[ctrTone(ctrValue)],
+              )}
+            />
+          </TableCell>
+        );
+      })}
 
-      <TableCell className="text-right text-mono text-text">
-        {clicks > 0 ? formatCurrency(cpc) : '—'}
-      </TableCell>
       <TableCell
-        className="text-right text-mono text-text-muted"
-        title="CTR needs impressions, which we don't track yet"
+        className={cn(
+          'text-right text-mono',
+          clicks > 0 ? TONE_TEXT_CLASS[cpcTone(cpc)] : 'text-text-muted',
+        )}
       >
-        —
+        {clicks > 0 ? formatCurrency(cpc) : '—'}
       </TableCell>
       <TableCell
         className={cn(

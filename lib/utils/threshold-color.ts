@@ -30,6 +30,20 @@ export const HEALTHY_ATC_RATE = THRESHOLDS.HEALTHY_ATC_RATE;
 export const HEALTHY_IC_RATE = THRESHOLDS.HEALTHY_IC_RATE;
 export const HEALTHY_CTR = THRESHOLDS.HEALTHY_CTR;
 
+/**
+ * Display threshold for CPC (USD). Lower is better. Calibrated for typical
+ * low-AOV cold acquisition feeds: $1 is comfortable, $1.50 worrying.
+ */
+export const HEALTHY_CPC = 1.0;
+
+/** Lower-is-better banding for CPC, mirrors `cpaTone`. */
+export function cpcTone(cpc: number): ThresholdTone {
+  if (!Number.isFinite(cpc) || cpc <= 0) return 'neutral';
+  if (cpc <= HEALTHY_CPC) return 'success';
+  if (cpc <= HEALTHY_CPC * 1.5) return 'warning';
+  return 'danger';
+}
+
 /** rateTone(value, HEALTHY_CTR) — wrapper for symmetry with the others. */
 export function ctrTone(ctr: number): ThresholdTone {
   if (ctr <= 0) return 'neutral';

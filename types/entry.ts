@@ -38,6 +38,9 @@ export const AdsetEntryInputSchema = z.object({
   atc: z.number().int().min(0),
   ic: z.number().int().min(0),
   purchases: z.number().int().min(0).optional(),
+  /** CTR % entered by the user (clicks / impressions × 100). We don't
+   *  track impressions, so this is stored as input rather than derived. */
+  ctr: z.number().min(0).max(100).optional(),
 });
 
 export const AdsetEntrySchema = AdsetEntryInputSchema.extend({

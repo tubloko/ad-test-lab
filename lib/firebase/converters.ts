@@ -90,6 +90,7 @@ export function toAdsetEntry(raw: Raw): AdsetEntry {
     atc: raw.atc ?? 0,
     ic: raw.ic ?? 0,
     purchases: raw.purchases,
+    ctr: raw.ctr,
     createdAt: toDate(raw.createdAt),
     updatedAt: toDate(raw.updatedAt),
   };

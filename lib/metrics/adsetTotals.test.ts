@@ -69,17 +69,30 @@ describe('computeAdsetTotals', () => {
     expect(t.atcRate).toBe(0);
   });
 
-  it('CTR is 0 because impressions are not tracked yet', () => {
+  it('hasData is true when any field has a value', () => {
+    const t = computeAdsetTotals([ae('2026-05-01', { spend: 5 })], ALL_TIME);
+    expect(t.hasData).toBe(true);
+  });
+
+  it('CTR is the clicks-weighted average of per-day CTR', () => {
+    const t = computeAdsetTotals(
+      [
+        ae('2026-05-01', { clicks: 100, ctr: 1.0 }),
+        ae('2026-05-02', { clicks: 300, ctr: 2.0 }),
+      ],
+      ALL_TIME,
+    );
+    // weighted = (1.0*100 + 2.0*300) / 400 = 700/400 = 1.75
+    expect(t.ctr).toBeCloseTo(1.75, 5);
+    expect(t.ctrTracked).toBe(true);
+  });
+
+  it('CTR is 0 and ctrTracked false when no entry has CTR', () => {
     const t = computeAdsetTotals(
       [ae('2026-05-01', { clicks: 100 })],
       ALL_TIME,
     );
     expect(t.ctr).toBe(0);
-    expect(t.totalImpressions).toBe(0);
-  });
-
-  it('hasData is true when any field has a value', () => {
-    const t = computeAdsetTotals([ae('2026-05-01', { spend: 5 })], ALL_TIME);
-    expect(t.hasData).toBe(true);
+    expect(t.ctrTracked).toBe(false);
   });
 });
