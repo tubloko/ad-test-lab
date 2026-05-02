@@ -7,11 +7,13 @@ import { useCallback, useRef, type KeyboardEvent } from 'react';
  *
  * - Tab / Shift+Tab → next / previous cell on the same row
  * - Enter / Shift+Enter → next / previous cell in the same column
- * - Esc → blur, restore initial value (caller's job to actually revert)
- * - Cmd/Ctrl+Enter → save and stay (caller's job to save)
- * - Arrow keys are NOT hijacked while typing inside an input — that would
- *   break native cursor movement. The caller can opt into arrow-key cell
- *   movement by checking `e.currentTarget.selectionStart === 0` etc.
+ * - ArrowUp / ArrowDown → previous / next cell in the same column (always)
+ * - ArrowLeft / ArrowRight → previous / next cell on the same row, but
+ *   ONLY when the caret is at the boundary of the input value. Otherwise
+ *   the arrow moves the caret within the input as normal — same as
+ *   Google Sheets in cell-edit mode.
+ * - Esc → blur and let the caller revert
+ * - Cmd/Ctrl+Enter → save and stay
  *
  * Caller wires it up by:
  *   1. Calling getRef(row, col) for every input's `ref` prop.
@@ -37,6 +39,30 @@ interface UseGridNavigationArgs {
   onSave?: (row: number, col: number) => void;
   /** Optional escape handler — called when user hits Esc. */
   onEscape?: (row: number, col: number) => void;
+}
+
+function caretAtStart(el: HTMLInputElement): boolean {
+  // Numeric inputs don't expose selection, so getter throws or returns null.
+  // When that happens, treat the input as boundary-everywhere — arrow keys
+  // act as cell navigation.
+  try {
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    return start === 0 && end === 0;
+  } catch {
+    return true;
+  }
+}
+
+function caretAtEnd(el: HTMLInputElement): boolean {
+  try {
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const len = el.value.length;
+    return start === len && end === len;
+  } catch {
+    return true;
+  }
 }
 
 export function useGridNavigation({
@@ -72,17 +98,15 @@ export function useGridNavigation({
   const onKeyDown = useCallback(
     (row: number, col: number) =>
       (event: KeyboardEvent<HTMLInputElement>) => {
-        const isTab = event.key === 'Tab';
-        const isEnter = event.key === 'Enter';
-        const isEsc = event.key === 'Escape';
+        const target = event.currentTarget;
+        const k = event.key;
 
-        if (isTab) {
+        if (k === 'Tab') {
           event.preventDefault();
           const nextCol = event.shiftKey ? col - 1 : col + 1;
           if (nextCol >= 0 && nextCol < colCount) {
             focusCell(row, nextCol);
           } else {
-            // wrap to next/prev row
             const nextRow = event.shiftKey ? row - 1 : row + 1;
             if (nextRow >= 0 && nextRow < rowCount) {
               focusCell(nextRow, event.shiftKey ? colCount - 1 : 0);
@@ -91,7 +115,7 @@ export function useGridNavigation({
           return;
         }
 
-        if (isEnter) {
+        if (k === 'Enter') {
           if ((event.metaKey || event.ctrlKey) && onSave) {
             event.preventDefault();
             onSave(row, col);
@@ -99,13 +123,35 @@ export function useGridNavigation({
           }
           event.preventDefault();
           const nextRow = event.shiftKey ? row - 1 : row + 1;
-          if (nextRow >= 0 && nextRow < rowCount) {
-            focusCell(nextRow, col);
-          }
+          if (nextRow >= 0 && nextRow < rowCount) focusCell(nextRow, col);
           return;
         }
 
-        if (isEsc) {
+        if (k === 'ArrowUp') {
+          event.preventDefault();
+          if (row - 1 >= 0) focusCell(row - 1, col);
+          return;
+        }
+
+        if (k === 'ArrowDown') {
+          event.preventDefault();
+          if (row + 1 < rowCount) focusCell(row + 1, col);
+          return;
+        }
+
+        if (k === 'ArrowLeft' && caretAtStart(target)) {
+          event.preventDefault();
+          if (col - 1 >= 0) focusCell(row, col - 1);
+          return;
+        }
+
+        if (k === 'ArrowRight' && caretAtEnd(target)) {
+          event.preventDefault();
+          if (col + 1 < colCount) focusCell(row, col + 1);
+          return;
+        }
+
+        if (k === 'Escape') {
           event.preventDefault();
           onEscape?.(row, col);
           event.currentTarget.blur();

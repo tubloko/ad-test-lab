@@ -11,3 +11,11 @@ export function getBrowserTimezone(): string {
     return 'UTC';
   }
 }
+
+/** Subtract one day from a "YYYY-MM-DD" string. */
+export function dayBefore(yyyymmdd: string): string {
+  const [y, m, d] = yyyymmdd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().slice(0, 10);
+}

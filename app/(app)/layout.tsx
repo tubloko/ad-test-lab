@@ -106,9 +106,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Desktop sidebar */}
-      <aside className="hidden w-56 shrink-0 flex-col justify-between border-r border-border bg-surface p-4 md:flex">
-        <div className="space-y-4">
+      {/* Desktop sidebar — sticky so the user menu and sign-out stay
+          visible while the main column scrolls. */}
+      <aside className="hidden md:flex md:sticky md:top-0 md:h-svh w-56 shrink-0 flex-col justify-between border-r border-border bg-surface p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           <div className="flex items-center justify-between px-2">
             <Link href="/" className="text-subheading font-semibold text-text">
               AdTestLab
