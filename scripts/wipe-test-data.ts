@@ -47,43 +47,50 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-const args = parseArgs(process.argv.slice(2));
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
 
-const sa = JSON.parse(
-  readFileSync(
-    new URL(
-      '../adtestlab-daf5a-firebase-adminsdk-fbsvc-0911a76ce0.json',
-      import.meta.url,
+  const sa = JSON.parse(
+    readFileSync(
+      new URL(
+        '../adtestlab-daf5a-firebase-adminsdk-fbsvc-0911a76ce0.json',
+        import.meta.url,
+      ),
+      'utf8',
     ),
-    'utf8',
-  ),
-);
+  );
 
-initializeApp({ credential: cert(sa), projectId: sa.project_id });
+  initializeApp({ credential: cert(sa), projectId: sa.project_id });
 
-const auth = getAuth();
-const db = getFirestore();
+  const auth = getAuth();
+  const db = getFirestore();
 
-const uid = args.uid ?? (await auth.getUserByEmail(args.email!)).uid;
-const productsPath = `users/${uid}/products`;
-const productsRef = db.collection(productsPath);
+  const uid = args.uid ?? (await auth.getUserByEmail(args.email!)).uid;
+  const productsPath = `users/${uid}/products`;
+  const productsRef = db.collection(productsPath);
 
-const snap = await productsRef.get();
-console.log(`Project:    ${sa.project_id}`);
-console.log(`UID:        ${uid}`);
-console.log(`Path:       ${productsPath}`);
-console.log(`Top-level products to delete: ${snap.size}`);
+  const snap = await productsRef.get();
+  console.log(`Project:    ${sa.project_id}`);
+  console.log(`UID:        ${uid}`);
+  console.log(`Path:       ${productsPath}`);
+  console.log(`Top-level products to delete: ${snap.size}`);
 
-if (snap.empty) {
-  console.log('Nothing to wipe. Done.');
-  process.exit(0);
+  if (snap.empty) {
+    console.log('Nothing to wipe. Done.');
+    return;
+  }
+
+  if (!args.execute) {
+    console.log('\nDry run. Re-run with --execute to actually delete.');
+    return;
+  }
+
+  console.log('\nExecuting recursiveDelete on the products collection...');
+  await db.recursiveDelete(productsRef);
+  console.log('Wipe complete.');
 }
 
-if (!args.execute) {
-  console.log('\nDry run. Re-run with --execute to actually delete.');
-  process.exit(0);
-}
-
-console.log('\nExecuting recursiveDelete on the products collection...');
-await db.recursiveDelete(productsRef);
-console.log('Wipe complete.');
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
