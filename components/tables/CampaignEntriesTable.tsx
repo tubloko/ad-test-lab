@@ -103,18 +103,29 @@ export function CampaignEntriesTable({
     { tempId: 'today-default', date: today },
   ]);
 
+  // Maintain `extras` so the table always shows:
+  //  • today (so the user can fill it in)
+  //  • every date that has adset data but no campaign entry yet
+  //  • whatever the user has explicitly backfilled
+  // Any extra whose date now has a saved campaign entry is dropped — that
+  // row is rendered as a SavedEntryRow instead.
   useEffect(() => {
     const savedDates = new Set(entries.map((e) => e.date));
     setExtras((prev) => {
-      let next = prev.filter((r) => !savedDates.has(r.date));
+      const next = prev.filter((r) => !savedDates.has(r.date));
       if (!savedDates.has(today) && !next.some((r) => r.date === today)) {
-        next = [{ tempId: `today-${today}`, date: today }, ...next];
+        next.unshift({ tempId: `today-${today}`, date: today });
       }
-      return next.length === prev.length && next.every((r, i) => r === prev[i])
-        ? prev
-        : next;
+      for (const adsetDate of adsetSpendByDate.keys()) {
+        if (savedDates.has(adsetDate)) continue;
+        if (next.some((r) => r.date === adsetDate)) continue;
+        next.push({ tempId: `adset-${adsetDate}`, date: adsetDate });
+      }
+      const sameAsBefore =
+        next.length === prev.length && next.every((r, i) => r === prev[i]);
+      return sameAsBefore ? prev : next;
     });
-  }, [entries, today]);
+  }, [entries, today, adsetSpendByDate]);
 
   const [backfillOpen, setBackfillOpen] = useState(false);
   const [pendingFocusDate, setPendingFocusDate] = useState<string | null>(null);
@@ -276,6 +287,13 @@ export function CampaignEntriesTable({
                   adsetSpendSum={adsetSpendByDate.get(r.date) ?? 0}
                   targetCPA={targetCPA}
                   grid={grid}
+                  // Auto-derived rows (today, adset-only) re-appear after a
+                  // local removal — hide the trash so users don't think it's
+                  // doing nothing. User-backfilled rows have UUID tempIds.
+                  removable={
+                    !r.tempId.startsWith('today-') &&
+                    !r.tempId.startsWith('adset-')
+                  }
                   onSaveEntry={onSaveEntry}
                   onRemoveExtra={() =>
                     setExtras((prev) => prev.filter((x) => x.tempId !== r.tempId))
@@ -384,6 +402,7 @@ interface ExtraRowProps {
   adsetSpendSum: number;
   targetCPA: number;
   grid: ReturnType<typeof useGridNavigation>;
+  removable: boolean;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
   onRemoveExtra: () => void;
 }
@@ -395,6 +414,7 @@ function ExtraRowComponent({
   adsetSpendSum,
   targetCPA,
   grid,
+  removable,
   onSaveEntry,
   onRemoveExtra,
 }: ExtraRowProps) {
@@ -523,7 +543,7 @@ function ExtraRowComponent({
       </TableCell>
 
       <TableCell className="w-10 text-right">
-        {!isToday && (
+        {removable && (
           <Button
             type="button"
             variant="ghost"
