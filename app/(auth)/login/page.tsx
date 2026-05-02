@@ -1,16 +1,34 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
-import { signInWithGoogle } from '@/lib/firebase/auth';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { GoogleIcon } from '@/components/icons/GoogleIcon';
+import { useLogin } from '@/hooks/useLogin';
+
+const LoginFormSchema = z.object({
+  email: z.string().email('Enter a valid email'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+type LoginFormValues = z.infer<typeof LoginFormSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
+  const { loading, error, signInWithGoogle, signInWithEmail } = useLogin();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(LoginFormSchema),
+    defaultValues: { email: '', password: '' },
+  });
 
-  const handleGoogle = async () => {
-    await signInWithGoogle();
-    router.push('/');
-  };
+  const onSubmit = ({ email, password }: LoginFormValues) =>
+    signInWithEmail(email, password);
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-bg p-6">
@@ -21,9 +39,65 @@ export default function LoginPage() {
             Sign in to manage your ad tests
           </p>
         </div>
-        <Button onClick={handleGoogle} className="w-full" size="lg">
-          Sign in with Google
+
+        <Button
+          onClick={signInWithGoogle}
+          variant="secondary"
+          size="lg"
+          className="w-full"
+          disabled={loading}
+        >
+          <GoogleIcon className="size-5" />
+          Continue with Google
         </Button>
+
+        <div className="flex items-center gap-3 text-caption text-text-muted">
+          <span className="h-px flex-1 bg-border" />
+          <span>or</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              aria-invalid={Boolean(errors.email)}
+              {...register('email')}
+            />
+            {errors.email && (
+              <p className="text-caption text-danger-text">{errors.email.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              aria-invalid={Boolean(errors.password)}
+              {...register('password')}
+            />
+            {errors.password && (
+              <p className="text-caption text-danger-text">
+                {errors.password.message}
+              </p>
+            )}
+          </div>
+
+          <Button type="submit" size="lg" className="w-full" disabled={loading}>
+            {loading ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+
+        {error && (
+          <p className="text-center text-caption text-danger-text" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </main>
   );
