@@ -43,8 +43,8 @@ yarn-error.log*
 *firebase-adminsdk*.json
 serviceAccountKey.json
 
-# local-only docs containing secrets
-CLAUDE_CODE_PROMPTS.md
+# local-only prompt/spec docs (may contain secrets)
+*_PROMPTS.md
 
 # vercel
 .vercel
