@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Pencil, Trash2, Plus, ListTodo } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, Plus, ListTodo, Layers } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useProduct } from '@/hooks/useProduct';
 import { useCampaign } from '@/hooks/useCampaign';
@@ -217,8 +217,15 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         </div>
         {adsets.length === 0 ? (
           <EmptyState
+            icon={Layers}
             title="No adsets in this campaign"
             description="Add adsets to auto-fill campaign spend from their daily numbers."
+            action={
+              <Button type="button" onClick={() => setNewAdsetOpen(true)}>
+                <Plus className="size-4" />
+                Create your first adset
+              </Button>
+            }
           />
         ) : (
           <AdsetAccordion
