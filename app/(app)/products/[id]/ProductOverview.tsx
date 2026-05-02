@@ -9,6 +9,7 @@ import { VerdictPanel } from '@/components/verdict/VerdictPanel';
 import { SpendVsRevenueChart } from '@/components/charts/SpendVsRevenueChart';
 import { CPATrendChart } from '@/components/charts/CPATrendChart';
 import { RecentEntriesSummary } from './RecentEntriesSummary';
+// FIXME(refactor-1b): ProductEntry is gone — use CampaignEntry. This component now belongs under a campaign route.
 import type { ProductEntry, AdsetEntry } from '@/types/entry';
 
 interface ProductOverviewProps {
@@ -32,6 +33,7 @@ export function ProductOverview({
     [adsetEntriesByAdsetId],
   );
 
+  // FIXME(refactor-1b): useVerdict args renamed (campaignEntries, not productEntries) and the bundle field is now `input`, not `product`.
   const { result, product } = useVerdict({
     productEntries,
     adsetEntries,

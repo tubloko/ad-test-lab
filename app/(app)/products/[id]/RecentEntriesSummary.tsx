@@ -9,6 +9,7 @@ import {
   profitTone,
   TONE_TEXT_CLASS,
 } from '@/lib/utils/threshold-color';
+// FIXME(refactor-1b): ProductEntry removed — use CampaignEntry; the "recent days" widget belongs at campaign level.
 import type { ProductEntry } from '@/types/entry';
 
 interface RecentEntriesSummaryProps {

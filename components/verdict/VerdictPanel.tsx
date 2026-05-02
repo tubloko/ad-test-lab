@@ -1,6 +1,7 @@
 'use client';
 
 import type { VerdictResult } from '@/lib/verdict-engine';
+// FIXME(refactor-1b): ProductAggregate removed; bind to VerdictInput from useVerdict (`bundle.input`) instead.
 import type { ProductAggregate } from '@/lib/metrics/aggregate';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import {

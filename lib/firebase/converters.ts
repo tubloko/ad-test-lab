@@ -1,7 +1,8 @@
 import { Timestamp, type DocumentData } from 'firebase/firestore';
 import type { Product } from '@/types/product';
+import type { Campaign } from '@/types/campaign';
 import type { Adset } from '@/types/adset';
-import type { ProductEntry, AdsetEntry } from '@/types/entry';
+import type { CampaignEntry, AdsetEntry } from '@/types/entry';
 import type { Diagnosis } from '@/types/diagnosis';
 import type { User } from '@/types/user';
 
@@ -39,10 +40,23 @@ export function toProduct(raw: Raw & { id: string }): Product {
   };
 }
 
+export function toCampaign(raw: Raw & { id: string }): Campaign {
+  return {
+    id: raw.id,
+    productId: raw.productId,
+    name: raw.name,
+    status: raw.status,
+    notes: raw.notes,
+    createdAt: toDate(raw.createdAt),
+    updatedAt: toDate(raw.updatedAt),
+  };
+}
+
 export function toAdset(raw: Raw & { id: string }): Adset {
   return {
     id: raw.id,
     productId: raw.productId,
+    campaignId: raw.campaignId,
     name: raw.name,
     audience: raw.audience,
     funnelStage: raw.funnelStage,
@@ -53,13 +67,14 @@ export function toAdset(raw: Raw & { id: string }): Adset {
   };
 }
 
-export function toProductEntry(raw: Raw): ProductEntry {
+export function toCampaignEntry(raw: Raw): CampaignEntry {
   return {
     date: raw.date ?? raw.id ?? '',
     spend: raw.spend ?? 0,
     revenue: raw.revenue ?? 0,
     orders: raw.orders ?? 0,
     cogs: raw.cogs ?? 0,
+    spendOverride: raw.spendOverride ?? false,
     notes: raw.notes,
     createdAt: toDate(raw.createdAt),
     updatedAt: toDate(raw.updatedAt),
@@ -84,6 +99,7 @@ export function toDiagnosis(raw: Raw & { id: string }): Diagnosis {
   return {
     id: raw.id,
     productId: raw.productId,
+    campaignId: raw.campaignId,
     inputHash: raw.inputHash,
     dateRange: raw.dateRange,
     ruleVerdict: raw.ruleVerdict,

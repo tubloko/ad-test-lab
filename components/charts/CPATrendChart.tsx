@@ -18,6 +18,7 @@ import { cpa } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatDate } from '@/lib/utils/formatDate';
 import { isWithinRange } from '@/lib/utils/dateRange';
+// FIXME(refactor-1b): ProductEntry removed — accept CampaignEntry (or EnrichedCampaignEntry to use displayedSpend).
 import type { ProductEntry } from '@/types/entry';
 
 interface CPATrendChartProps {

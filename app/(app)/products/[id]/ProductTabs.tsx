@@ -5,6 +5,7 @@ import { ProductEntriesTable } from '@/components/tables/ProductEntriesTable';
 import { AdsetsTab } from './AdsetsTab';
 import type { Product } from '@/types/product';
 import type { Adset } from '@/types/adset';
+// FIXME(refactor-1b): Product*Entry* types removed — use Campaign*Entry*. This component will likely move to a campaign route.
 import type { ProductEntry, ProductEntryInput } from '@/types/entry';
 
 interface ProductTabsProps {

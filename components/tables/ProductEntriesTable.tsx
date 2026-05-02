@@ -32,6 +32,7 @@ import {
   isWithinRange,
   type DateRangePreset,
 } from '@/lib/utils/dateRange';
+// FIXME(refactor-1b): ProductEntry/ProductEntryInput removed — switch to CampaignEntry/CampaignEntryInput. Rename component to CampaignEntriesTable; bind spend column to displayedSpend with override toggle.
 import type { ProductEntry, ProductEntryInput } from '@/types/entry';
 
 interface ProductEntriesTableProps {

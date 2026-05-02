@@ -16,6 +16,7 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface CacheDiagnosisInput {
   productId: string;
+  campaignId: string;
   inputHash: string;
   dateRange: { from: string; to: string };
   ruleVerdict: Diagnosis['ruleVerdict'];
@@ -28,9 +29,10 @@ export interface CacheDiagnosisInput {
 export async function getCachedDiagnosis(
   uid: string,
   productId: string,
-  inputHash: string
+  campaignId: string,
+  inputHash: string,
 ): Promise<Diagnosis | null> {
-  const ref = collection(db, paths.diagnoses(uid, productId));
+  const ref = collection(db, paths.diagnoses(uid, productId, campaignId));
   const q = query(ref, where('inputHash', '==', inputHash));
   const snap = await getDocs(q);
   if (snap.empty) return null;
@@ -50,9 +52,12 @@ export async function getCachedDiagnosis(
 
 export async function cacheDiagnosis(
   uid: string,
-  input: CacheDiagnosisInput
+  input: CacheDiagnosisInput,
 ): Promise<string> {
-  const ref = collection(db, paths.diagnoses(uid, input.productId));
+  const ref = collection(
+    db,
+    paths.diagnoses(uid, input.productId, input.campaignId),
+  );
   const expiresAt = Timestamp.fromMillis(Date.now() + TTL_MS);
   const docRef = await addDoc(ref, {
     ...input,

@@ -4,16 +4,29 @@ export const DateStringSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD');
 
-export const ProductEntryInputSchema = z.object({
+/**
+ * Campaign daily entry. Lives under a campaign (not a product).
+ *
+ * `spend` semantics:
+ *   - When `spendOverride` is false (default), the stored `spend` is a
+ *     cache and the displayed value is the sum of adset entries for the
+ *     same date.
+ *   - When `spendOverride` is true, the user has manually edited the
+ *     campaign-level spend and the stored value takes precedence over
+ *     the adset sum. Use clearSpendOverride() to revert to auto-fill.
+ */
+export const CampaignEntryInputSchema = z.object({
   spend: z.number().min(0),
   revenue: z.number().min(0),
   orders: z.number().int().min(0),
   cogs: z.number().min(0),
+  spendOverride: z.boolean().optional(),
   notes: z.string().max(1000).optional(),
 });
 
-export const ProductEntrySchema = ProductEntryInputSchema.extend({
+export const CampaignEntrySchema = CampaignEntryInputSchema.extend({
   date: DateStringSchema,
+  spendOverride: z.boolean(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -33,8 +46,8 @@ export const AdsetEntrySchema = AdsetEntryInputSchema.extend({
   updatedAt: z.date(),
 });
 
-export type ProductEntryInput = z.infer<typeof ProductEntryInputSchema>;
-export type ProductEntry = z.infer<typeof ProductEntrySchema>;
+export type CampaignEntryInput = z.infer<typeof CampaignEntryInputSchema>;
+export type CampaignEntry = z.infer<typeof CampaignEntrySchema>;
 export type AdsetEntryInput = z.infer<typeof AdsetEntryInputSchema>;
 export type AdsetEntry = z.infer<typeof AdsetEntrySchema>;
 export type DateString = z.infer<typeof DateStringSchema>;

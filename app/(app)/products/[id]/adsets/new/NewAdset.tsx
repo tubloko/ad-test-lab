@@ -19,6 +19,7 @@ export function NewAdset({ productId }: NewAdsetProps) {
 
   const handleSubmit = async (data: AdsetInput) => {
     if (!user) return;
+    // FIXME(refactor-1b): createAdset now takes (uid, productId, campaignId, input). Route shape needs a [campaignId] segment.
     await createAdset(user.uid, productId, data);
     router.push(`/products/${productId}`);
   };

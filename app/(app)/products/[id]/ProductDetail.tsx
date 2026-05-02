@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useUser } from '@/hooks/useUser';
 import { useProduct } from '@/hooks/useProduct';
+// FIXME(refactor-1b): useProductEntries was deleted — switch to useCampaignEntries(productId, campaignId).
 import { useProductEntries } from '@/hooks/useProductEntries';
+// FIXME(refactor-1b): useProductEntryMutations was renamed — use useCampaignEntryMutations(productId, campaignId).
 import { useProductEntryMutations } from '@/hooks/useProductEntryMutations';
 import { useAdsets } from '@/hooks/useAdsets';
 import { useAllAdsetEntries } from '@/hooks/useAllAdsetEntries';
@@ -27,10 +29,14 @@ export function ProductDetail({ productId }: ProductDetailProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: product, loading, error } = useProduct(productId);
+  // FIXME(refactor-1b): page must select/derive a campaignId before reading entries; entries now scoped to campaign.
   const { data: entries } = useProductEntries(productId);
+  // FIXME(refactor-1b): useAdsets now requires (productId, campaignId).
   const { data: adsets, loading: adsetsLoading } = useAdsets(productId);
   const adsetIds = useMemo(() => adsets.map((a) => a.id), [adsets]);
+  // FIXME(refactor-1b): useAllAdsetEntries now requires (productId, campaignId, adsetIds).
   const { byAdsetId } = useAllAdsetEntries(productId, adsetIds);
+  // FIXME(refactor-1b): swap for useCampaignEntryMutations(productId, campaignId).
   const { saveEntry, deleteEntry } = useProductEntryMutations(productId);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -70,6 +76,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
 
   const handleDeleteAdset = async (adsetId: string) => {
     if (!user) return;
+    // FIXME(refactor-1b): deleteAdset now requires (uid, productId, campaignId, adsetId).
     await deleteAdset(user.uid, productId, adsetId);
   };
 

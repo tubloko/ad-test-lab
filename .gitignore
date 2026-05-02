@@ -46,6 +46,10 @@ serviceAccountKey.json
 # local-only prompt/spec docs (may contain secrets)
 *_PROMPTS.md
 
+# local-only docs (non-technical overview, manual QA plan)
+WHAT_IS_THIS.txt
+MANUAL_QA.txt
+
 # vercel
 .vercel
 

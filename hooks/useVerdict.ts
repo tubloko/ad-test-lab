@@ -2,17 +2,18 @@
 
 import { useMemo } from 'react';
 import {
-  aggregateProductEntries,
-  aggregateAdsetEntries,
-  mergeForVerdict,
+  aggregateCampaignForVerdict,
   type DateRange,
-  type ProductAggregate,
 } from '@/lib/metrics/aggregate';
-import { getVerdict, type VerdictResult } from '@/lib/verdict-engine';
-import type { ProductEntry, AdsetEntry } from '@/types/entry';
+import {
+  getVerdict,
+  type VerdictResult,
+  type VerdictInput,
+} from '@/lib/verdict-engine';
+import type { CampaignEntry, AdsetEntry } from '@/types/entry';
 
 interface UseVerdictArgs {
-  productEntries: ProductEntry[];
+  campaignEntries: CampaignEntry[];
   adsetEntries: AdsetEntry[][];
   targetCPA: number;
   range: DateRange;
@@ -20,20 +21,23 @@ interface UseVerdictArgs {
 
 interface VerdictBundle {
   result: VerdictResult;
-  product: ProductAggregate;
+  input: VerdictInput;
 }
 
 export function useVerdict({
-  productEntries,
+  campaignEntries,
   adsetEntries,
   targetCPA,
   range,
 }: UseVerdictArgs): VerdictBundle {
   return useMemo(() => {
-    const product = aggregateProductEntries(productEntries, range);
-    const adsetAggs = adsetEntries.map((entries) => aggregateAdsetEntries(entries, range));
-    const input = mergeForVerdict(product, adsetAggs, targetCPA);
+    const input = aggregateCampaignForVerdict(
+      campaignEntries,
+      adsetEntries,
+      range,
+      targetCPA,
+    );
     const result = getVerdict(input);
-    return { result, product };
-  }, [productEntries, adsetEntries, targetCPA, range]);
+    return { result, input };
+  }, [campaignEntries, adsetEntries, targetCPA, range]);
 }

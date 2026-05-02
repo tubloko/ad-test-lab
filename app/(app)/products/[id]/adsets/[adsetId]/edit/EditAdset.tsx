@@ -18,10 +18,12 @@ export function EditAdset({ productId, adsetId }: EditAdsetProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: product } = useProduct(productId);
+  // FIXME(refactor-1b): useAdset and updateAdset both need a campaignId. Route should be /products/[id]/campaigns/[campaignId]/adsets/[adsetId]/edit.
   const { data: adset, loading, error } = useAdset(productId, adsetId);
 
   const handleSubmit = async (data: AdsetInput) => {
     if (!user) return;
+    // FIXME(refactor-1b): updateAdset now takes (uid, productId, campaignId, adsetId, input).
     await updateAdset(user.uid, productId, adsetId, data);
     router.push(`/products/${productId}/adsets/${adsetId}`);
   };

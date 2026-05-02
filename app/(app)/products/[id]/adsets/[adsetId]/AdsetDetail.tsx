@@ -28,6 +28,7 @@ export function AdsetDetail({ productId, adsetId }: AdsetDetailProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: product } = useProduct(productId);
+  // FIXME(refactor-1b): useAdset/useAdsetEntries/useAdsetEntryMutations now take (productId, campaignId, adsetId). Route shape needs a [campaignId] segment.
   const { data: adset, loading, error } = useAdset(productId, adsetId);
   const { data: entries } = useAdsetEntries(productId, adsetId);
   const { saveEntry, deleteEntry } = useAdsetEntryMutations(productId, adsetId);
@@ -66,6 +67,7 @@ export function AdsetDetail({ productId, adsetId }: AdsetDetailProps) {
 
   const handleDelete = async () => {
     if (!user) return;
+    // FIXME(refactor-1b): deleteAdset now takes (uid, productId, campaignId, adsetId).
     await deleteAdset(user.uid, productId, adsetId);
     router.push(`/products/${productId}`);
   };
