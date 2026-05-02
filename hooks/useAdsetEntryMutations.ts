@@ -15,6 +15,7 @@ interface AdsetEntryMutations {
 
 export function useAdsetEntryMutations(
   productId: string,
+  campaignId: string,
   adsetId: string,
 ): AdsetEntryMutations {
   const { data: user } = useUser();
@@ -22,17 +23,17 @@ export function useAdsetEntryMutations(
   const saveEntry = useCallback(
     async (date: string, values: AdsetEntryInput) => {
       if (!user) throw new Error('Not authenticated');
-      await upsertAdsetEntry(user.uid, productId, adsetId, date, values);
+      await upsertAdsetEntry(user.uid, productId, campaignId, adsetId, date, values);
     },
-    [user, productId, adsetId],
+    [user, productId, campaignId, adsetId],
   );
 
   const deleteEntry = useCallback(
     async (date: string) => {
       if (!user) throw new Error('Not authenticated');
-      await deleteAdsetEntry(user.uid, productId, adsetId, date);
+      await deleteAdsetEntry(user.uid, productId, campaignId, adsetId, date);
     },
-    [user, productId, adsetId],
+    [user, productId, campaignId, adsetId],
   );
 
   return { saveEntry, deleteEntry };

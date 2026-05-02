@@ -17,6 +17,7 @@ export const AdsetInputSchema = z.object({
 export const AdsetSchema = AdsetInputSchema.extend({
   id: z.string().min(1),
   productId: z.string().min(1),
+  campaignId: z.string().min(1),
   status: AdsetStatusSchema,
   createdAt: z.date(),
   updatedAt: z.date(),

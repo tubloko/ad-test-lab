@@ -37,7 +37,9 @@ adtestlab/
 │   │       ├── new/
 │   │       └── [id]/
 │   │           ├── edit/
-│   │           └── adsets/[adsetId]/
+│   │           └── campaigns/[campaignId]/
+│   │               ├── edit/
+│   │               └── adsets/[adsetId]/
 │   └── api/diagnose/route.ts
 ├── components/
 │   ├── ui/                     # shadcn primitives, never edit directly
@@ -76,11 +78,12 @@ All user data lives under `users/{uid}/...`. This makes security rules trivial.
 
 ```
 users/{uid}                                              // user profile
-users/{uid}/products/{productId}                         // product
-users/{uid}/products/{productId}/adsets/{adsetId}        // adset
-users/{uid}/products/{productId}/entries/{YYYY-MM-DD}    // product daily entry
-users/{uid}/products/{productId}/adsets/{adsetId}/entries/{YYYY-MM-DD}  // adset daily
-users/{uid}/products/{productId}/diagnoses/{diagnosisId} // cached AI diagnoses
+users/{uid}/products/{productId}                         // product (organizational container only)
+users/{uid}/products/{productId}/campaigns/{campaignId}  // campaign — verdicts live here
+users/{uid}/products/{productId}/campaigns/{campaignId}/entries/{YYYY-MM-DD}        // campaign daily entry
+users/{uid}/products/{productId}/campaigns/{campaignId}/adsets/{adsetId}            // adset
+users/{uid}/products/{productId}/campaigns/{campaignId}/adsets/{adsetId}/entries/{YYYY-MM-DD}  // adset daily
+users/{uid}/products/{productId}/campaigns/{campaignId}/diagnoses/{diagnosisId}     // cached AI diagnoses
 ```
 
 **Critical conventions:**
@@ -88,6 +91,8 @@ users/{uid}/products/{productId}/diagnoses/{diagnosisId} // cached AI diagnoses
 - `createdAt` and `updatedAt` are Firestore timestamps
 - All money values are numbers in USD (no multi-currency in MVP)
 - Computed fields (CTR, CPA, ROAS, profit) are NEVER stored — always computed on read
+- **Verdicts apply at the campaign level, not the product level.** A product is just a container; one product can hold many campaigns each with their own verdict.
+- **Campaign-entry `spend` is auto-filled from adsets.** When `spendOverride` is `false` (default), the displayed spend is the sum of adset entries for that date. Setting `spendOverride: true` makes the stored value win. See `lib/firebase/entries.ts` for the helpers (`upsertCampaignEntry` flips the flag to true on manual edit; `clearSpendOverride` reverts to auto-fill).
 
 See `references/data-model.md` for full field schemas.
 

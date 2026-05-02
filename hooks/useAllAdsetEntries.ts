@@ -21,6 +21,7 @@ interface AllAdsetEntriesResult {
 
 export function useAllAdsetEntries(
   productId: string | undefined,
+  campaignId: string | undefined,
   adsetIds: string[],
 ): AllAdsetEntriesResult {
   const { data: user } = useUser();
@@ -30,10 +31,13 @@ export function useAllAdsetEntries(
   const idsKey = useMemo(() => adsetIds.slice().sort().join(','), [adsetIds]);
 
   useEffect(() => {
-    if (!user || !productId || idsKey === '') return;
+    if (!user || !productId || !campaignId || idsKey === '') return;
     const ids = idsKey.split(',');
     const unsubs = ids.map((adsetId) => {
-      const ref = collection(db, paths.adsetEntries(user.uid, productId, adsetId));
+      const ref = collection(
+        db,
+        paths.adsetEntries(user.uid, productId, campaignId, adsetId),
+      );
       return onSnapshot(
         query(ref, orderBy('date', 'desc')),
         (snap) => {
@@ -44,7 +48,7 @@ export function useAllAdsetEntries(
       );
     });
     return () => unsubs.forEach((u) => u());
-  }, [user, productId, idsKey]);
+  }, [user, productId, campaignId, idsKey]);
 
   const byAdsetId = useMemo(() => {
     const out: Record<string, AdsetEntry[]> = {};

@@ -1,0 +1,227 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { ArrowLeft, Pencil, Trash2, Plus, ListTodo } from 'lucide-react';
+import { useUser } from '@/hooks/useUser';
+import { useProduct } from '@/hooks/useProduct';
+import { useCampaign } from '@/hooks/useCampaign';
+import { useCampaignEntries } from '@/hooks/useCampaignEntries';
+import { useCampaignEntryMutations } from '@/hooks/useCampaignEntryMutations';
+import { useAdsets } from '@/hooks/useAdsets';
+import { useAllAdsetEntries } from '@/hooks/useAllAdsetEntries';
+import { useDateRangePreset } from '@/hooks/useDateRangePreset';
+import { useVerdict } from '@/hooks/useVerdict';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { EmptyState } from '@/components/EmptyState';
+import { StatusBadge } from '@/components/StatusBadge';
+import { StickyVerdictBar } from '@/components/verdict/StickyVerdictBar';
+import { CampaignEntriesTable } from '@/components/tables/CampaignEntriesTable';
+import { AdsetAccordion } from '@/components/AdsetAccordion';
+import { SpendVsRevenueChart } from '@/components/charts/SpendVsRevenueChart';
+import { CPATrendChart } from '@/components/charts/CPATrendChart';
+import { deleteCampaign } from '@/lib/firebase/campaigns';
+import { deleteAdset } from '@/lib/firebase/adsets';
+import { rangeStartDate } from '@/lib/utils/dateRange';
+import { todayInTimezone, getBrowserTimezone } from '@/lib/utils/date';
+
+interface CampaignDetailProps {
+  productId: string;
+  campaignId: string;
+}
+
+export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
+  const router = useRouter();
+  const { data: user } = useUser();
+  const { data: product } = useProduct(productId);
+  const { data: campaign, loading, error } = useCampaign(productId, campaignId);
+  const { data: entries } = useCampaignEntries(productId, campaignId);
+  const { saveEntry, clearOverride, deleteEntry } = useCampaignEntryMutations(
+    productId,
+    campaignId,
+  );
+  const { data: adsets } = useAdsets(productId, campaignId);
+  const adsetIds = useMemo(() => adsets.map((a) => a.id), [adsets]);
+  const { byAdsetId } = useAllAdsetEntries(productId, campaignId, adsetIds);
+  const adsetEntries = useMemo(
+    () => adsetIds.map((id) => byAdsetId[id] ?? []),
+    [adsetIds, byAdsetId],
+  );
+
+  const { preset, setPreset } = useDateRangePreset('14d');
+  const today = todayInTimezone(getBrowserTimezone());
+  const fromDate = rangeStartDate(preset, today);
+  const range = useMemo(() => ({ from: fromDate, to: today }), [fromDate, today]);
+
+  const targetCPA = product?.targetCPA ?? 0;
+  const { result, input } = useVerdict({
+    campaignEntries: entries,
+    adsetEntries,
+    targetCPA,
+    range,
+  });
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-4">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-40" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <p className="rounded-md border border-danger-border bg-danger-bg/10 p-4 text-caption text-danger-text">
+        Couldn&apos;t load campaign: {error.message}
+      </p>
+    );
+  }
+
+  if (!campaign) {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-3 text-center">
+        <p className="text-subheading text-text">Campaign not found.</p>
+        <Link
+          href={`/products/${productId}`}
+          className={buttonVariants({ variant: 'outline' })}
+        >
+          Back to product
+        </Link>
+      </div>
+    );
+  }
+
+  const handleDeleteCampaign = async () => {
+    if (!user) return;
+    await deleteCampaign(user.uid, productId, campaignId);
+    router.push(`/products/${productId}`);
+  };
+
+  const handleDeleteAdset = async (adsetId: string) => {
+    if (!user) return;
+    await deleteAdset(user.uid, productId, campaignId, adsetId);
+  };
+
+  const hasAnyData = entries.length > 0 || adsetIds.some((id) => (byAdsetId[id]?.length ?? 0) > 0);
+
+  return (
+    <section className="mx-auto w-full max-w-6xl space-y-6">
+      <StickyVerdictBar
+        result={result}
+        input={input}
+        targetCPA={targetCPA}
+        preset={preset}
+        onPresetChange={setPreset}
+      />
+
+      <Link
+        href={`/products/${productId}`}
+        className="inline-flex items-center gap-1 text-caption text-text-muted hover:text-text"
+      >
+        <ArrowLeft className="size-3.5" />
+        {product?.name ?? 'Product'}
+      </Link>
+
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-heading text-text">{campaign.name}</h1>
+            <StatusBadge status={campaign.status} />
+          </div>
+          {campaign.notes && (
+            <p className="max-w-prose text-body text-text-muted">{campaign.notes}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/products/${productId}/campaigns/${campaignId}/edit`}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <Pencil className="size-4" />
+            Edit
+          </Link>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="size-4" />
+            Delete
+          </Button>
+        </div>
+      </header>
+
+      {!hasAnyData && (
+        <EmptyState
+          icon={ListTodo}
+          title="No entries yet"
+          description="Add today's numbers below — campaign entries auto-fill spend from adsets."
+        />
+      )}
+
+      <section className="space-y-3">
+        <h2 className="text-subheading text-text">Daily entries</h2>
+        <CampaignEntriesTable
+          entries={entries}
+          targetCPA={targetCPA}
+          defaultCOGS={product?.defaultCOGS}
+          timezone={getBrowserTimezone()}
+          onSaveEntry={saveEntry}
+          onClearOverride={clearOverride}
+          onDeleteEntry={deleteEntry}
+        />
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-subheading text-text">Adsets</h2>
+          <Link
+            href={`/products/${productId}/campaigns/${campaignId}/adsets/new`}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <Plus className="size-4" />
+            New adset
+          </Link>
+        </div>
+        {adsets.length === 0 ? (
+          <EmptyState
+            title="No adsets in this campaign"
+            description="Add adsets to auto-fill campaign spend from their daily numbers."
+          />
+        ) : (
+          <AdsetAccordion
+            productId={productId}
+            campaignId={campaignId}
+            adsets={adsets}
+            onConfirmDelete={handleDeleteAdset}
+          />
+        )}
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <SpendVsRevenueChart entries={entries} fromDate={fromDate} toDate={today} />
+        <CPATrendChart
+          entries={entries}
+          targetCPA={targetCPA}
+          fromDate={fromDate}
+          toDate={today}
+        />
+      </section>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Delete "${campaign.name}"?`}
+        description="This will permanently delete the campaign, its adsets, and every daily entry."
+        onConfirm={handleDeleteCampaign}
+      />
+    </section>
+  );
+}

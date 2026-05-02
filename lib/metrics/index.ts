@@ -7,12 +7,7 @@ export { atcRate } from './atcRate';
 export { icRate } from './icRate';
 export { purchaseRate } from './purchaseRate';
 export {
-  aggregateProductEntries,
   aggregateAdsetEntries,
-  mergeForVerdict,
+  aggregateCampaignForVerdict,
 } from './aggregate';
-export type {
-  DateRange,
-  ProductAggregate,
-  AdsetAggregate,
-} from './aggregate';
+export type { DateRange, AdsetAggregate } from './aggregate';

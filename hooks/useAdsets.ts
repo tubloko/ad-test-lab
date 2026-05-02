@@ -14,19 +14,24 @@ interface AdsetsResult {
   error: FirestoreError | undefined;
 }
 
-export function useAdsets(productId: string | undefined): AdsetsResult {
+export function useAdsets(
+  productId: string | undefined,
+  campaignId: string | undefined,
+): AdsetsResult {
   const { data: user } = useUser();
   const q =
-    user && productId
+    user && productId && campaignId
       ? query(
-          collection(db, paths.adsets(user.uid, productId)),
-          orderBy('createdAt', 'desc')
+          collection(db, paths.adsets(user.uid, productId, campaignId)),
+          orderBy('createdAt', 'desc'),
         )
       : null;
 
   const [snap, loading, error] = useCollection(q);
 
-  if (!user || !productId) return { data: [], loading: false, error: undefined };
+  if (!user || !productId || !campaignId) {
+    return { data: [], loading: false, error: undefined };
+  }
 
   const data = (snap?.docs ?? []).map((d) => toAdset({ id: d.id, ...d.data() }));
   return { data, loading, error };

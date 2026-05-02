@@ -4,23 +4,23 @@ import { collection, query, orderBy, type FirestoreError } from 'firebase/firest
 import { useCollection } from 'react-firebase-hooks/firestore';
 import { db } from '@/lib/firebase/config';
 import { paths } from '@/lib/firebase/paths';
-import { toProductEntry } from '@/lib/firebase/converters';
+import { toCampaign } from '@/lib/firebase/converters';
 import { useUser } from './useUser';
-import type { ProductEntry } from '@/types/entry';
+import type { Campaign } from '@/types/campaign';
 
-interface ProductEntriesResult {
-  data: ProductEntry[];
+interface CampaignsResult {
+  data: Campaign[];
   loading: boolean;
   error: FirestoreError | undefined;
 }
 
-export function useProductEntries(productId: string | undefined): ProductEntriesResult {
+export function useCampaigns(productId: string | undefined): CampaignsResult {
   const { data: user } = useUser();
   const q =
     user && productId
       ? query(
-          collection(db, paths.productEntries(user.uid, productId)),
-          orderBy('date', 'desc')
+          collection(db, paths.campaigns(user.uid, productId)),
+          orderBy('createdAt', 'desc'),
         )
       : null;
 
@@ -28,6 +28,6 @@ export function useProductEntries(productId: string | undefined): ProductEntries
 
   if (!user || !productId) return { data: [], loading: false, error: undefined };
 
-  const data = (snap?.docs ?? []).map((d) => toProductEntry({ id: d.id, ...d.data() }));
+  const data = (snap?.docs ?? []).map((d) => toCampaign({ id: d.id, ...d.data() }));
   return { data, loading, error };
 }

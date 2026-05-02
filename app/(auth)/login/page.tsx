@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
 import { useLogin } from '@/hooks/useLogin';
+import { useUser } from '@/hooks/useUser';
 
 const CredentialsSchema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -20,8 +22,22 @@ type Mode = 'signin' | 'signup';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('signin');
+  const router = useRouter();
+  const { data: user, loading: userLoading } = useUser();
   const { loading, error, signInWithGoogle, signInWithEmail, signUpWithEmail } =
     useLogin();
+
+  useEffect(() => {
+    if (!userLoading && user) router.replace('/');
+  }, [user, userLoading, router]);
+
+  if (userLoading || user) {
+    return (
+      <main className="flex min-h-svh items-center justify-center bg-bg text-text-muted">
+        Loading…
+      </main>
+    );
+  }
 
   const {
     register,

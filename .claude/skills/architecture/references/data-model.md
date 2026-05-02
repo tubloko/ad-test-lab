@@ -7,17 +7,21 @@ Full Firestore schema for AdTestLab. This is the canonical source.
 ```
 users/{uid}
   ├── (user document fields)
-  ├── products/{productId}
-  │   ├── (product document fields)
-  │   ├── adsets/{adsetId}
-  │   │   ├── (adset document fields)
-  │   │   └── entries/{YYYY-MM-DD}
-  │   │       └── (adset daily entry fields)
-  │   ├── entries/{YYYY-MM-DD}
-  │   │   └── (product daily entry fields)
-  │   └── diagnoses/{diagnosisId}
-  │       └── (cached AI diagnosis fields)
+  └── products/{productId}
+      ├── (product document fields)            // organizational container only
+      └── campaigns/{campaignId}
+          ├── (campaign document fields)       // verdicts apply HERE, not at product level
+          ├── entries/{YYYY-MM-DD}
+          │   └── (campaign daily entry fields)
+          ├── adsets/{adsetId}
+          │   ├── (adset document fields)
+          │   └── entries/{YYYY-MM-DD}
+          │       └── (adset daily entry fields)
+          └── diagnoses/{diagnosisId}
+              └── (cached AI diagnosis fields)
 ```
+
+A product is a container with a name and target CPA; it has no spend/revenue/verdict of its own. All daily numbers and verdicts live under the campaigns nested below it.
 
 ## User Document
 
@@ -38,6 +42,8 @@ Path: `users/{uid}`
 
 Path: `users/{uid}/products/{productId}`
 
+A product is purely organizational. No verdict or daily numbers attach to it.
+
 | Field | Type | Notes |
 |---|---|---|
 | `id` | string | matches doc ID, denormalized |
@@ -49,14 +55,31 @@ Path: `users/{uid}/products/{productId}`
 | `createdAt` | Timestamp | server |
 | `updatedAt` | Timestamp | server |
 
-## Adset Document
+## Campaign Document
 
-Path: `users/{uid}/products/{productId}/adsets/{adsetId}`
+Path: `users/{uid}/products/{productId}/campaigns/{campaignId}`
+
+This is where verdicts live. Each campaign has its own daily entries, adsets, and cached diagnoses.
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | string | matches doc ID |
 | `productId` | string | denormalized for queries |
+| `name` | string | campaign name |
+| `status` | `'testing' \| 'scaled' \| 'killed' \| 'paused'` | defaults to `'testing'` |
+| `notes` | string | optional |
+| `createdAt` | Timestamp | server |
+| `updatedAt` | Timestamp | server |
+
+## Adset Document
+
+Path: `users/{uid}/products/{productId}/campaigns/{campaignId}/adsets/{adsetId}`
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | matches doc ID |
+| `productId` | string | denormalized for breadcrumbs |
+| `campaignId` | string | denormalized for queries |
 | `name` | string | full Meta-style: `"SA \| TOF \| Storm Machine \| tier1 \| 60$"` |
 | `audience` | string | `"tier1"`, `"tier2"`, etc. |
 | `funnelStage` | `'TOF' \| 'MOF' \| 'BOF'` | top/middle/bottom of funnel |
@@ -65,28 +88,36 @@ Path: `users/{uid}/products/{productId}/adsets/{adsetId}`
 | `createdAt` | Timestamp | server |
 | `updatedAt` | Timestamp | server |
 
-## Product Daily Entry
+## Campaign Daily Entry
 
-Path: `users/{uid}/products/{productId}/entries/{YYYY-MM-DD}`
+Path: `users/{uid}/products/{productId}/campaigns/{campaignId}/entries/{YYYY-MM-DD}`
 
-**Document ID = the date.** This guarantees one entry per day per product.
+**Document ID = the date.** Guarantees one entry per day per campaign.
 
 | Field | Type | Notes |
 |---|---|---|
 | `date` | string | `"YYYY-MM-DD"`, matches doc ID |
-| `spend` | number | total ad spend that day |
+| `spend` | number | total ad spend that day (see `spendOverride`) |
 | `revenue` | number | Shopify revenue |
 | `orders` | number | order count |
 | `cogs` | number | COGS for that day's orders |
+| `spendOverride` | boolean | see below — defaults to `false` |
 | `notes` | string | optional |
 | `createdAt` | Timestamp | server |
 | `updatedAt` | Timestamp | server |
+
+### `spendOverride` semantics
+
+- `false` (default) — the displayed/effective spend is the **sum of adset entry spends for the same date**. The stored `spend` field is ignored for display.
+- `true` — the user manually edited the campaign-level spend; the stored `spend` value wins. Use `clearSpendOverride()` to revert to auto-fill.
+
+`upsertCampaignEntry` flips the flag to `true` automatically when the caller passes a `spend` value (i.e. a manual edit). Background sync paths that just want to cache the auto-filled total should use a different code path to avoid setting the flag.
 
 **Computed fields (NEVER stored):** CPA, ROAS, profit. Compute on read.
 
 ## Adset Daily Entry
 
-Path: `users/{uid}/products/{productId}/adsets/{adsetId}/entries/{YYYY-MM-DD}`
+Path: `users/{uid}/products/{productId}/campaigns/{campaignId}/adsets/{adsetId}/entries/{YYYY-MM-DD}`
 
 | Field | Type | Notes |
 |---|---|---|
@@ -104,12 +135,15 @@ Path: `users/{uid}/products/{productId}/adsets/{adsetId}/entries/{YYYY-MM-DD}`
 
 ## Cached Diagnosis
 
-Path: `users/{uid}/products/{productId}/diagnoses/{diagnosisId}`
+Path: `users/{uid}/products/{productId}/campaigns/{campaignId}/diagnoses/{diagnosisId}`
+
+Diagnoses are per-campaign. The cache key (`inputHash`) is scoped to the campaign's data over a date range.
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | string | matches doc ID |
 | `productId` | string | denormalized |
+| `campaignId` | string | denormalized |
 | `inputHash` | string | SHA-256 of input data — cache key |
 | `dateRange` | `{ from: string; to: string }` | `"YYYY-MM-DD"` strings |
 | `ruleVerdict` | `VerdictType` | from rule engine |
@@ -149,10 +183,22 @@ export interface Product {
   updatedAt: Date;
 }
 
+// types/campaign.ts
+export interface Campaign {
+  id: string;
+  productId: string;
+  name: string;
+  status: 'testing' | 'scaled' | 'killed' | 'paused';
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // types/adset.ts
 export interface Adset {
   id: string;
   productId: string;
+  campaignId: string;
   name: string;
   audience: string;
   funnelStage: 'TOF' | 'MOF' | 'BOF';
@@ -163,12 +209,13 @@ export interface Adset {
 }
 
 // types/entry.ts
-export interface ProductEntry {
+export interface CampaignEntry {
   date: string;
   spend: number;
   revenue: number;
   orders: number;
   cogs: number;
+  spendOverride: boolean;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -191,13 +238,13 @@ export interface AdsetEntry {
 
 For MVP, none. All queries are within a single subcollection (no compound queries).
 
-If/when you add cross-product queries (e.g., "show all my adsets"), Firestore will tell you which index to create.
+If/when you add cross-campaign queries (e.g., "show all my adsets across all campaigns"), Firestore will tell you which index to create.
 
 ## Migration Notes
 
-For MVP, no migration tooling. If you need to change a schema:
-1. Add the new field as optional
-2. Backfill manually from Firebase console for your test users
-3. Once stable, make it required in TypeScript
+For MVP, no migration tooling. Schema changes are made by:
+1. Add the new field as optional in zod
+2. Backfill manually from Firebase console for the test user
+3. Once stable, make it required
 
-When you have real users, you'll need a proper migration script. Out of scope for MVP.
+The campaign-layer refactor (May 2026) was a hard cutover: `scripts/wipe-test-data.ts` is the supported way to reset the test account when the data shape changes. Real-user migration tooling is out of scope for MVP.

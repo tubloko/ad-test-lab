@@ -16,20 +16,24 @@ interface AdsetEntriesResult {
 
 export function useAdsetEntries(
   productId: string | undefined,
-  adsetId: string | undefined
+  campaignId: string | undefined,
+  adsetId: string | undefined,
 ): AdsetEntriesResult {
   const { data: user } = useUser();
   const q =
-    user && productId && adsetId
+    user && productId && campaignId && adsetId
       ? query(
-          collection(db, paths.adsetEntries(user.uid, productId, adsetId)),
-          orderBy('date', 'desc')
+          collection(
+            db,
+            paths.adsetEntries(user.uid, productId, campaignId, adsetId),
+          ),
+          orderBy('date', 'desc'),
         )
       : null;
 
   const [snap, loading, error] = useCollection(q);
 
-  if (!user || !productId || !adsetId) {
+  if (!user || !productId || !campaignId || !adsetId) {
     return { data: [], loading: false, error: undefined };
   }
 

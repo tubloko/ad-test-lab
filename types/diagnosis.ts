@@ -19,6 +19,7 @@ export const ConfidenceLevelSchema = z.enum(CONFIDENCE_LEVELS);
 export const DiagnosisSchema = z.object({
   id: z.string().min(1),
   productId: z.string().min(1),
+  campaignId: z.string().min(1),
   inputHash: z.string().min(1),
   dateRange: z.object({ from: DateStringSchema, to: DateStringSchema }),
   ruleVerdict: VerdictTypeSchema,

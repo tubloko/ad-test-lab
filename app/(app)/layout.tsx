@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { signOutUser } from '@/lib/firebase/auth';
 import { useUser } from '@/hooks/useUser';
 import { useAuthBootstrap } from '@/hooks/useAuthBootstrap';
@@ -119,7 +120,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {userMenu}
       </aside>
 
-      <main className="flex-1 p-4 md:p-8">{children}</main>
+      <main className="flex-1 p-4 md:p-8">
+        <div className="mx-auto w-full max-w-6xl">
+          <Breadcrumbs />
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

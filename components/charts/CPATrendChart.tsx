@@ -18,10 +18,10 @@ import { cpa } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatDate } from '@/lib/utils/formatDate';
 import { isWithinRange } from '@/lib/utils/dateRange';
-import type { ProductEntry } from '@/types/entry';
+import type { EnrichedCampaignEntry } from '@/hooks/useCampaignEntries';
 
 interface CPATrendChartProps {
-  entries: ProductEntry[];
+  entries: EnrichedCampaignEntry[];
   targetCPA: number;
   fromDate: string | null;
   toDate: string;
@@ -41,7 +41,7 @@ export function CPATrendChart({
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((e) => ({
         date: e.date,
-        cpa: cpa(e.spend, e.orders),
+        cpa: cpa(e.effectiveSpend, e.orders),
       }));
   }, [entries, fromDate, toDate]);
 

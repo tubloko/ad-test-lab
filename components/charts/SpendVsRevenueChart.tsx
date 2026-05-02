@@ -17,10 +17,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatDate } from '@/lib/utils/formatDate';
 import { isWithinRange } from '@/lib/utils/dateRange';
-import type { ProductEntry } from '@/types/entry';
+import type { EnrichedCampaignEntry } from '@/hooks/useCampaignEntries';
 
 interface SpendVsRevenueChartProps {
-  entries: ProductEntry[];
+  entries: EnrichedCampaignEntry[];
   fromDate: string | null;
   toDate: string;
 }
@@ -37,7 +37,7 @@ export function SpendVsRevenueChart({
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((e) => ({
         date: e.date,
-        Spend: e.spend,
+        Spend: e.effectiveSpend,
         Revenue: e.revenue,
       }));
   }, [entries, fromDate, toDate]);
