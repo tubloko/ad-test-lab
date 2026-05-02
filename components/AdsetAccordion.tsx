@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from './StatusBadge';
 import { AdsetHealthDot } from './AdsetHealthDot';
-import { AdsetTotalsRow } from './AdsetTotalsRow';
+import { AdsetSummaryStrip } from './AdsetSummaryStrip';
 import { AdsetEntriesTable } from '@/components/tables/AdsetEntriesTable';
 import { EditAdsetDialog } from '@/components/forms/EditAdsetDialog';
 import { useAdsetEntries } from '@/hooks/useAdsetEntries';
@@ -139,64 +139,64 @@ function AdsetItem({
         open={open}
         onToggle={(e) => onOpenChange((e.currentTarget as HTMLDetailsElement).open)}
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <ChevronDown
-              className={`size-4 shrink-0 text-text-muted transition-transform ${
-                open ? 'rotate-0' : '-rotate-90'
-              }`}
-            />
-            <AdsetHealthDot health={health} />
-            <span className="truncate text-subheading text-text">{adset.name}</span>
-            <Badge variant="outline">{adset.funnelStage}</Badge>
-            <StatusBadge status={adset.status} />
-            <span className="text-caption text-text-muted">
-              {adset.budget && adset.budget > 0
-                ? `Budget ${formatCurrency(adset.budget)}/day`
-                : 'CBO'}
-            </span>
+        <summary className="flex cursor-pointer list-none flex-col gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <ChevronDown
+                className={`size-4 shrink-0 text-text-muted transition-transform ${
+                  open ? 'rotate-0' : '-rotate-90'
+                }`}
+              />
+              <AdsetHealthDot health={health} />
+              <span className="truncate text-subheading text-text">{adset.name}</span>
+              <Badge variant="outline">{adset.funnelStage}</Badge>
+              <StatusBadge status={adset.status} />
+              <span className="text-caption text-text-muted">
+                {adset.budget && adset.budget > 0
+                  ? `Budget ${formatCurrency(adset.budget)}/day`
+                  : 'CBO'}
+              </span>
+            </div>
+
+            <div
+              className="flex shrink-0 items-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Edit adset"
+                onClick={() => setEditOpen(true)}
+              >
+                <Pencil className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Delete adset"
+                onClick={() => onDelete(adset.id)}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
           </div>
 
-          <div
-            className="flex shrink-0 items-center gap-1"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Edit adset"
-              onClick={() => setEditOpen(true)}
-            >
-              <Pencil className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Delete adset"
-              onClick={() => onDelete(adset.id)}
-            >
-              <Trash2 className="size-4" />
-            </Button>
+          {/* Five-metric summary, always visible whether expanded or
+              collapsed. Wraps on narrow viewports — never forces scroll. */}
+          <div className="ml-7 min-w-0">
+            <AdsetSummaryStrip totals={totals} />
           </div>
         </summary>
       </details>
-
-      {/* Always-visible totals strip. Outside <details> so its position
-          is unaffected by expand/collapse. Column widths come from
-          ADSET_GRID_COLUMNS, matching the table below pixel-for-pixel. */}
-      <div className="border-t border-border-subtle overflow-x-auto">
-        <AdsetTotalsRow totals={totals} />
-      </div>
 
       {open && (
         <div className="border-t border-border-subtle p-4">
           <AdsetEntriesTable
             entries={entries}
             timezone={getBrowserTimezone()}
-            hideTotalsRow
             onSaveEntry={saveEntry}
             onDeleteEntry={deleteEntry}
           />

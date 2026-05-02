@@ -37,16 +37,12 @@ import {
   type DateRangePreset,
 } from '@/lib/utils/dateRange';
 import { cn } from '@/lib/utils';
-import { ADSET_GRID_COLUMNS } from './AdsetEntriesTable.shared';
 import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import type { AdsetEntry, AdsetEntryInput } from '@/types/entry';
 
 interface AdsetEntriesTableProps {
   entries: AdsetEntry[];
   timezone: string;
-  /** When true, the in-table TOTAL footer row is suppressed because the
-   *  caller renders an external AdsetTotalsRow above the table. */
-  hideTotalsRow?: boolean;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
 }
@@ -91,7 +87,6 @@ interface ExtraRow {
 export function AdsetEntriesTable({
   entries,
   timezone,
-  hideTotalsRow = false,
   onSaveEntry,
   onDeleteEntry,
 }: AdsetEntriesTableProps) {
@@ -224,13 +219,8 @@ export function AdsetEntriesTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <Table className="table-fixed">
-          <colgroup>
-            {ADSET_GRID_COLUMNS.map((c) => (
-              <col key={c.key} style={{ width: `${c.width}px` }} />
-            ))}
-          </colgroup>
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
@@ -277,7 +267,7 @@ export function AdsetEntriesTable({
               ),
             )}
           </TableBody>
-          {!hideTotalsRow && filtered.length > 0 && (
+          {filtered.length > 0 && (
             <TableFooter>
               <TableRow className="bg-elevated">
                 <TableCell className="text-subheading text-text">Total</TableCell>

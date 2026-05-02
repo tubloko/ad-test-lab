@@ -28,6 +28,26 @@ export function rateTone(rate: number, healthy: number): ThresholdTone {
 export const HEALTHY_LPV_RATE = THRESHOLDS.HEALTHY_LPV_RATE;
 export const HEALTHY_ATC_RATE = THRESHOLDS.HEALTHY_ATC_RATE;
 export const HEALTHY_IC_RATE = THRESHOLDS.HEALTHY_IC_RATE;
+export const HEALTHY_CTR = THRESHOLDS.HEALTHY_CTR;
+
+/** rateTone(value, HEALTHY_CTR) — wrapper for symmetry with the others. */
+export function ctrTone(ctr: number): ThresholdTone {
+  if (ctr <= 0) return 'neutral';
+  return rateTone(ctr, HEALTHY_CTR);
+}
+export function lpvRateTone(rate: number): ThresholdTone {
+  if (rate <= 0) return 'neutral';
+  return rateTone(rate, HEALTHY_LPV_RATE);
+}
+export function atcRateTone(rate: number): ThresholdTone {
+  if (rate <= 0) return 'neutral';
+  return rateTone(rate, HEALTHY_ATC_RATE);
+}
+/** Display IC% relative to LPV — see HEALTHY_IC_FROM_LPV. */
+export function icRateTone(rate: number): ThresholdTone {
+  if (rate <= 0) return 'neutral';
+  return rateTone(rate, HEALTHY_IC_FROM_LPV);
+}
 
 /**
  * Display-only thresholds for IC% and Conv% measured against landing-page
