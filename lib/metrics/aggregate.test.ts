@@ -105,7 +105,8 @@ describe('aggregateCampaignForVerdict', () => {
     expect(input.targetCPA).toBe(60);
   });
 
-  it('uses stored campaign spend when spendOverride is true', () => {
+  it('ignores stored campaign spend even when spendOverride is true', () => {
+    // spendOverride is a deprecated field — adsets are the source of truth.
     const campaign = [
       ce('2026-05-01', {
         spend: 999,
@@ -118,19 +119,13 @@ describe('aggregateCampaignForVerdict', () => {
     const adset = [ae('2026-05-01', { spend: 60 })];
 
     const input = aggregateCampaignForVerdict(campaign, [adset], ALL_TIME, 60);
-    expect(input.totalSpend).toBe(999);
+    expect(input.totalSpend).toBe(60);
     expect(input.daysActive).toBe(1);
   });
 
-  it('mixes auto-fill and override across dates', () => {
+  it('always pulls spend from adsets across dates', () => {
     const campaign = [
-      ce('2026-05-01', {
-        spend: 500,
-        revenue: 100,
-        orders: 1,
-        cogs: 10,
-        spendOverride: true,
-      }),
+      ce('2026-05-01', { spend: 500, revenue: 100, orders: 1, cogs: 10 }),
       ce('2026-05-02', { revenue: 200, orders: 2, cogs: 20 }),
     ];
     const adset = [
@@ -139,8 +134,7 @@ describe('aggregateCampaignForVerdict', () => {
     ];
 
     const input = aggregateCampaignForVerdict(campaign, [adset], ALL_TIME, 60);
-    // day1 override: 500. day2 auto-fill: 70.
-    expect(input.totalSpend).toBe(570);
+    expect(input.totalSpend).toBe(150); // 80 + 70
     expect(input.totalRevenue).toBe(300);
     expect(input.totalOrders).toBe(3);
     expect(input.daysActive).toBe(2);

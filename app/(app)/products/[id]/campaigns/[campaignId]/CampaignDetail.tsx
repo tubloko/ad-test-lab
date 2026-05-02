@@ -43,7 +43,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
   const { data: product } = useProduct(productId);
   const { data: campaign, loading, error } = useCampaign(productId, campaignId);
   const { data: entries, adsetSpendByDate } = useCampaignEntries(productId, campaignId);
-  const { saveEntry, clearOverride, deleteEntry } = useCampaignEntryMutations(
+  const { saveEntry, deleteEntry } = useCampaignEntryMutations(
     productId,
     campaignId,
   );
@@ -204,7 +204,6 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
             targetCPA={targetCPA}
             timezone={getBrowserTimezone()}
             onSaveEntry={saveEntry}
-            onClearOverride={clearOverride}
             onDeleteEntry={deleteEntry}
           />
         </div>

@@ -1,16 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Loader2,
-  Check,
-  AlertTriangle,
-  Sigma,
-  Pencil,
-  RotateCcw,
-  Trash2,
-  Plus,
-} from 'lucide-react';
+import { Loader2, Check, AlertTriangle, Trash2, Plus, Sigma } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -45,44 +36,33 @@ import type { CampaignEntryInput } from '@/types/entry';
 
 interface CampaignEntriesTableProps {
   entries: EnrichedCampaignEntry[];
-  /** Sum of adset spend per date — needed for the auto-fill on rows that
-   *  don't have a saved campaign entry yet. */
+  /** Per-date sum of adset spend — drives the (read-only) Spend column. */
   adsetSpendByDate: Map<string, number>;
   targetCPA: number;
   timezone: string;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
-  onClearOverride: (date: string) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
 }
 
-const EDITABLE_COLS = ['spend', 'revenue', 'orders', 'cogs'] as const;
+// Spend is a derived display column — never editable.
+const EDITABLE_COLS = ['revenue', 'orders', 'cogs'] as const;
 type EditableField = (typeof EDITABLE_COLS)[number];
 
 interface RowDraft {
-  spend: string;
   revenue: string;
   orders: string;
   cogs: string;
-  spendOverride: boolean;
 }
 
 function toDraft(entry: EnrichedCampaignEntry): RowDraft {
   return {
-    spend: entry.spendOverride ? String(entry.spend) : String(entry.displayedSpend),
     revenue: entry.revenue ? String(entry.revenue) : '',
     orders: entry.orders ? String(entry.orders) : '',
     cogs: entry.cogs ? String(entry.cogs) : '',
-    spendOverride: entry.spendOverride,
   };
 }
 
-const EMPTY_DRAFT: RowDraft = {
-  spend: '',
-  revenue: '',
-  orders: '',
-  cogs: '',
-  spendOverride: false,
-};
+const EMPTY_DRAFT: RowDraft = { revenue: '', orders: '', cogs: '' };
 
 interface ExtraRow {
   tempId: string;
@@ -95,7 +75,6 @@ export function CampaignEntriesTable({
   targetCPA,
   timezone,
   onSaveEntry,
-  onClearOverride,
   onDeleteEntry,
 }: CampaignEntriesTableProps) {
   const [preset, setPreset] = useState<DateRangePreset>('14d');
@@ -108,8 +87,6 @@ export function CampaignEntriesTable({
     [entries, fromDate, today],
   );
 
-  // Local extras: rows that exist in the table but don't yet have a saved
-  // entry. Today is auto-added as an extra when no saved entry exists for it.
   const [extras, setExtras] = useState<ExtraRow[]>([
     { tempId: 'today-default', date: today },
   ]);
@@ -130,11 +107,12 @@ export function CampaignEntriesTable({
   const handleAddRow = () => {
     const allDates = [...filtered.map((e) => e.date), ...extras.map((r) => r.date)];
     const oldest = allDates.length > 0 ? allDates.reduce((a, b) => (a < b ? a : b)) : today;
-    const candidate = dayBefore(oldest);
-    setExtras((prev) => [...prev, { tempId: crypto.randomUUID(), date: candidate }]);
+    setExtras((prev) => [
+      ...prev,
+      { tempId: crypto.randomUUID(), date: dayBefore(oldest) },
+    ]);
   };
 
-  // Sort: extras first (DESC by date), then saved entries (DESC).
   const sortedExtras = useMemo(
     () => [...extras].sort((a, b) => b.date.localeCompare(a.date)),
     [extras],
@@ -150,9 +128,8 @@ export function CampaignEntriesTable({
     colCount: EDITABLE_COLS.length,
   });
 
-  // Totals include dates that only have adset spend (no campaign entry yet)
-  // — mirrors the verdict aggregator so the table footer agrees with the
-  // sticky verdict bar.
+  // Totals mirror the verdict aggregator: spend comes from adsets, all
+  // other money/orders comes from campaign entries.
   const totals = useMemo(() => {
     const campaignByDate = new Map(filtered.map((e) => [e.date, e]));
     const allDates = new Set<string>(campaignByDate.keys());
@@ -164,11 +141,13 @@ export function CampaignEntriesTable({
     let orders = 0;
     let cogsTotal = 0;
     for (const date of allDates) {
+      spend += adsetSpendByDate.get(date) ?? 0;
       const ce = campaignByDate.get(date);
-      spend += ce?.spendOverride ? ce.spend : adsetSpendByDate.get(date) ?? 0;
-      revenue += ce?.revenue ?? 0;
-      orders += ce?.orders ?? 0;
-      cogsTotal += ce?.cogs ?? 0;
+      if (ce) {
+        revenue += ce.revenue;
+        orders += ce.orders;
+        cogsTotal += ce.cogs;
+      }
     }
     return {
       spend,
@@ -247,7 +226,6 @@ export function CampaignEntriesTable({
                 grid={grid}
                 usedDates={usedDates}
                 onSaveEntry={onSaveEntry}
-                onClearOverride={onClearOverride}
                 onDeleteEntry={onDeleteEntry}
                 onDeleteRequest={() => setPendingDelete(entry.date)}
               />
@@ -300,10 +278,7 @@ export function CampaignEntriesTable({
                   {totals.spend > 0 ? totals.roas.toFixed(2) : '—'}
                 </TableCell>
                 <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    TONE_TEXT_CLASS[profitTone(totals.profit)],
-                  )}
+                  className={cn('text-right text-mono', TONE_TEXT_CLASS[profitTone(totals.profit)])}
                 >
                   {formatCurrency(totals.profit)}
                 </TableCell>
@@ -376,16 +351,12 @@ function ExtraRowComponent({
   const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
-      // When override is on, write the user's spend. When off, write the
-      // current auto-fill value as a cache (the display layer recomputes
-      // from adsets on read regardless).
-      const spend = next.spendOverride ? parseNum(next.spend) : adsetSpendSum;
       await onSaveEntry(date, {
-        spend,
+        spend: adsetSpendSum,
         revenue: parseNum(next.revenue),
         orders: Math.round(parseNum(next.orders)),
         cogs: parseNum(next.cogs),
-        spendOverride: next.spendOverride,
+        spendOverride: false,
       });
       setStatus('saved');
       if (fadeTimer.current) clearTimeout(fadeTimer.current);
@@ -402,9 +373,6 @@ function ExtraRowComponent({
 
   const handleChange = (field: EditableField, raw: string) => {
     const next = { ...draft, [field]: raw };
-    if (field === 'spend') {
-      next.spendOverride = isManualSpend(raw, adsetSpendSum);
-    }
     setDraft(next);
     scheduleSave(next);
   };
@@ -416,12 +384,6 @@ function ExtraRowComponent({
 
   const handleEsc = () => setDraft(initialRef.current);
 
-  const handleResetSpend = () => {
-    const next = { ...draft, spend: '', spendOverride: false };
-    setDraft(next);
-    scheduleSave(next);
-  };
-
   const handleDateBlur = () => {
     if (pendingDate === date) return;
     if (!isValidDate(pendingDate) || (usedDates.has(pendingDate) && pendingDate !== date)) {
@@ -431,16 +393,15 @@ function ExtraRowComponent({
     onDateChange(pendingDate);
   };
 
-  const orders = parseNum(draft.orders);
+  const orders = Math.round(parseNum(draft.orders));
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
-  const effectiveSpend = draft.spendOverride ? parseNum(draft.spend) : adsetSpendSum;
-  const cpaValue = cpa(effectiveSpend, orders);
-  const roasValue = roas(revenue, effectiveSpend);
-  const profitValue = profit(revenue, effectiveSpend, cogs);
+  const spend = adsetSpendSum;
+  const cpaValue = cpa(spend, orders);
+  const roasValue = roas(revenue, spend);
+  const profitValue = profit(revenue, spend, cogs);
 
   const isToday = date === today;
-  const spendDisplay = draft.spendOverride ? draft.spend : (adsetSpendSum ? String(adsetSpendSum) : '');
 
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
@@ -453,40 +414,14 @@ function ExtraRowComponent({
         />
       </TableCell>
 
-      <TableCell className="text-right">
-        <div className="inline-flex items-center justify-end gap-1.5">
-          <SpendBadge
-            override={draft.spendOverride}
-            adsetSum={adsetSpendSum}
-            onReset={handleResetSpend}
-          />
-          <Input
-            ref={grid.getRef(row, 0)}
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min={0}
-            value={spendDisplay}
-            placeholder="0"
-            onChange={(e) => handleChange('spend', e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') handleEsc();
-              grid.onKeyDown(row, 0)(e);
-            }}
-            aria-label={`Spend on ${date}`}
-            className={cn(
-              'h-8 w-24 px-2 text-right text-mono',
-              !draft.spendOverride && 'text-text-muted',
-            )}
-          />
-        </div>
+      <TableCell className="text-right text-mono text-text-muted">
+        <SpendDisplay value={spend} />
       </TableCell>
 
-      {(['revenue', 'orders', 'cogs'] as const).map((field, i) => (
+      {EDITABLE_COLS.map((field, i) => (
         <TableCell key={field} className="text-right">
           <Input
-            ref={grid.getRef(row, i + 1)}
+            ref={grid.getRef(row, i)}
             type="number"
             inputMode={field === 'orders' ? 'numeric' : 'decimal'}
             step={field === 'orders' ? '1' : '0.01'}
@@ -497,7 +432,7 @@ function ExtraRowComponent({
             onBlur={handleBlur}
             onKeyDown={(e) => {
               if (e.key === 'Escape') handleEsc();
-              grid.onKeyDown(row, i + 1)(e);
+              grid.onKeyDown(row, i)(e);
             }}
             aria-label={`${field} on ${date}`}
             className="h-8 w-24 px-2 text-right text-mono"
@@ -516,10 +451,10 @@ function ExtraRowComponent({
       <TableCell
         className={cn(
           'text-right text-mono',
-          effectiveSpend > 0 ? TONE_TEXT_CLASS[roasTone(roasValue)] : 'text-text-muted',
+          spend > 0 ? TONE_TEXT_CLASS[roasTone(roasValue)] : 'text-text-muted',
         )}
       >
-        {effectiveSpend > 0 ? roasValue.toFixed(2) : '—'}
+        {spend > 0 ? roasValue.toFixed(2) : '—'}
       </TableCell>
       <TableCell
         className={cn('text-right text-mono', TONE_TEXT_CLASS[profitTone(profitValue)])}
@@ -557,7 +492,6 @@ interface SavedEntryRowProps {
   grid: ReturnType<typeof useGridNavigation>;
   usedDates: Set<string>;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
-  onClearOverride: (date: string) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
   onDeleteRequest: () => void;
 }
@@ -570,7 +504,6 @@ function SavedEntryRow({
   grid,
   usedDates,
   onSaveEntry,
-  onClearOverride,
   onDeleteEntry,
   onDeleteRequest,
 }: SavedEntryRowProps) {
@@ -587,15 +520,7 @@ function SavedEntryRow({
     setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
     setPendingDate(entry.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    entry.spend,
-    entry.revenue,
-    entry.orders,
-    entry.cogs,
-    entry.spendOverride,
-    entry.displayedSpend,
-    entry.date,
-  ]);
+  }, [entry.revenue, entry.orders, entry.cogs, entry.date]);
 
   useEffect(
     () => () => {
@@ -608,13 +533,12 @@ function SavedEntryRow({
   const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
-      const spend = next.spendOverride ? parseNum(next.spend) : entry.adsetSpendSum;
       await onSaveEntry(entry.date, {
-        spend,
+        spend: entry.adsetSpendSum,
         revenue: parseNum(next.revenue),
         orders: Math.round(parseNum(next.orders)),
         cogs: parseNum(next.cogs),
-        spendOverride: next.spendOverride,
+        spendOverride: false,
       });
       setStatus('saved');
       if (fadeTimer.current) clearTimeout(fadeTimer.current);
@@ -631,9 +555,6 @@ function SavedEntryRow({
 
   const handleChange = (field: EditableField, raw: string) => {
     const next = { ...draft, [field]: raw };
-    if (field === 'spend') {
-      next.spendOverride = isManualSpend(raw, entry.adsetSpendSum);
-    }
     setDraft(next);
     scheduleSave(next);
   };
@@ -643,21 +564,8 @@ function SavedEntryRow({
     void flushSave(draft);
   };
 
-  const handleEsc = () => {
-    setDraft(initialRef.current);
-  };
+  const handleEsc = () => setDraft(initialRef.current);
 
-  const handleResetSpend = async () => {
-    setStatus('saving');
-    try {
-      await onClearOverride(entry.date);
-      setStatus('saved');
-    } catch {
-      setStatus('error');
-    }
-  };
-
-  // "Move" the entry to a new date: write at new date, delete the old.
   const handleDateBlur = async () => {
     if (pendingDate === entry.date) return;
     const taken = usedDates.has(pendingDate) && pendingDate !== entry.date;
@@ -667,13 +575,12 @@ function SavedEntryRow({
     }
     setStatus('saving');
     try {
-      const spend = draft.spendOverride ? parseNum(draft.spend) : entry.adsetSpendSum;
       await onSaveEntry(pendingDate, {
-        spend,
+        spend: entry.adsetSpendSum,
         revenue: parseNum(draft.revenue),
         orders: Math.round(parseNum(draft.orders)),
         cogs: parseNum(draft.cogs),
-        spendOverride: draft.spendOverride,
+        spendOverride: false,
       });
       await onDeleteEntry(entry.date);
       setStatus('saved');
@@ -683,15 +590,13 @@ function SavedEntryRow({
     }
   };
 
-  const effectiveSpend = draft.spendOverride
-    ? parseNum(draft.spend)
-    : entry.adsetSpendSum;
-  const orders = parseNum(draft.orders);
+  const orders = Math.round(parseNum(draft.orders));
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
-  const cpaValue = cpa(effectiveSpend, orders);
-  const roasValue = roas(revenue, effectiveSpend);
-  const profitValue = profit(revenue, effectiveSpend, cogs);
+  const spend = entry.adsetSpendSum;
+  const cpaValue = cpa(spend, orders);
+  const roasValue = roas(revenue, spend);
+  const profitValue = profit(revenue, spend, cogs);
 
   const isToday = entry.date === today;
 
@@ -706,40 +611,14 @@ function SavedEntryRow({
         />
       </TableCell>
 
-      <TableCell className="text-right">
-        <div className="inline-flex items-center justify-end gap-1.5">
-          <SpendBadge
-            override={draft.spendOverride}
-            adsetSum={entry.adsetSpendSum}
-            onReset={handleResetSpend}
-          />
-          <Input
-            ref={grid.getRef(row, 0)}
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min={0}
-            value={draft.spend}
-            placeholder="0"
-            onChange={(e) => handleChange('spend', e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') handleEsc();
-              grid.onKeyDown(row, 0)(e);
-            }}
-            aria-label={`Spend on ${entry.date}`}
-            className={cn(
-              'h-8 w-24 px-2 text-right text-mono',
-              !draft.spendOverride && 'text-text-muted',
-            )}
-          />
-        </div>
+      <TableCell className="text-right text-mono text-text-muted">
+        <SpendDisplay value={spend} />
       </TableCell>
 
-      {(['revenue', 'orders', 'cogs'] as const).map((field, i) => (
+      {EDITABLE_COLS.map((field, i) => (
         <TableCell key={field} className="text-right">
           <Input
-            ref={grid.getRef(row, i + 1)}
+            ref={grid.getRef(row, i)}
             type="number"
             inputMode={field === 'orders' ? 'numeric' : 'decimal'}
             step={field === 'orders' ? '1' : '0.01'}
@@ -750,7 +629,7 @@ function SavedEntryRow({
             onBlur={handleBlur}
             onKeyDown={(e) => {
               if (e.key === 'Escape') handleEsc();
-              grid.onKeyDown(row, i + 1)(e);
+              grid.onKeyDown(row, i)(e);
             }}
             aria-label={`${field} on ${entry.date}`}
             className="h-8 w-24 px-2 text-right text-mono"
@@ -769,10 +648,10 @@ function SavedEntryRow({
       <TableCell
         className={cn(
           'text-right text-mono',
-          effectiveSpend > 0 ? TONE_TEXT_CLASS[roasTone(roasValue)] : 'text-text-muted',
+          spend > 0 ? TONE_TEXT_CLASS[roasTone(roasValue)] : 'text-text-muted',
         )}
       >
-        {effectiveSpend > 0 ? roasValue.toFixed(2) : '—'}
+        {spend > 0 ? roasValue.toFixed(2) : '—'}
       </TableCell>
       <TableCell
         className={cn('text-right text-mono', TONE_TEXT_CLASS[profitTone(profitValue)])}
@@ -829,47 +708,14 @@ function DateInput({
   );
 }
 
-function SpendBadge({
-  override,
-  adsetSum,
-  onReset,
-}: {
-  override: boolean;
-  adsetSum: number;
-  onReset: () => Promise<void> | void;
-}) {
-  if (override) {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <span
-          title={`Manual override. Auto-fill total: ${formatCurrency(adsetSum)}`}
-          className="inline-flex items-center gap-1 rounded-full border border-warning-border/50 bg-warning-bg/10 px-1.5 py-0.5 text-caption text-warning-text"
-        >
-          <Pencil className="size-3" />
-          manual
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Reset spend to auto-fill"
-          title="Reset to auto-fill"
-          onClick={onReset}
-          className="size-6 text-text-muted hover:text-text"
-        >
-          <RotateCcw className="size-3.5" />
-        </Button>
-      </span>
-    );
-  }
-
+function SpendDisplay({ value }: { value: number }) {
   return (
     <span
-      title={`Auto-summed from adsets (${formatCurrency(adsetSum)})`}
-      className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-elevated px-1.5 py-0.5 text-caption text-text-muted"
+      title="Auto-summed from adsets"
+      className="inline-flex items-center gap-1"
     >
-      <Sigma className="size-3" />
-      auto
+      <Sigma className="size-3 text-text-subtle" />
+      <span className="tabular-nums">{formatCurrency(value)}</span>
     </span>
   );
 }
@@ -896,22 +742,9 @@ function parseNum(s: string): number {
 function dirtyFieldsOnly(current: RowDraft, initial: RowDraft): Partial<RowDraft> {
   const out: Partial<RowDraft> = {};
   for (const k of EDITABLE_COLS) if (current[k] !== initial[k]) out[k] = current[k];
-  if (current.spendOverride !== initial.spendOverride) out.spendOverride = current.spendOverride;
   return out;
 }
 
 function isValidDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
-}
-
-/**
- * Treat the spend cell as a manual override only when the user has typed a
- * non-empty value AND that value differs from the auto-fill from adsets.
- * Empty input or value-matching-auto are both treated as auto, so users
- * don't accidentally lock in '0' just by tabbing through.
- */
-function isManualSpend(raw: string, adsetSpendSum: number): boolean {
-  const trimmed = raw.trim();
-  if (trimmed === '') return false;
-  return Math.abs(parseNum(trimmed) - adsetSpendSum) > 0.005;
 }

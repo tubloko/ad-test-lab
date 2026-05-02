@@ -67,12 +67,13 @@ export function useCampaignEntries(
     return docs.map((d) => {
       const entry = toCampaignEntry({ id: d.id, ...d.data() });
       const adsetSpendSum = adsetSumByDate.get(entry.date) ?? 0;
-      const effectiveSpend = entry.spendOverride ? entry.spend : adsetSpendSum;
+      // Adsets are the source of truth for spend. The stored entry.spend
+      // and entry.spendOverride are deprecated and ignored.
       return {
         ...entry,
         adsetSpendSum,
-        displayedSpend: effectiveSpend,
-        effectiveSpend,
+        displayedSpend: adsetSpendSum,
+        effectiveSpend: adsetSpendSum,
       };
     });
   }, [user, productId, campaignId, snap, adsetSumByDate]);

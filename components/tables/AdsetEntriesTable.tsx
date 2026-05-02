@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
-import { lpvRate, atcRate, icRate } from '@/lib/metrics';
+import { lpvRate, atcRate, icRate, purchaseRate } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatPercent } from '@/lib/utils/formatPercent';
 import { todayInTimezone, dayBefore } from '@/lib/utils/date';
@@ -42,7 +42,7 @@ interface AdsetEntriesTableProps {
   onDeleteEntry: (date: string) => Promise<void>;
 }
 
-const EDITABLE_COLS = ['spend', 'clicks', 'lpv', 'atc', 'ic'] as const;
+const EDITABLE_COLS = ['spend', 'clicks', 'lpv', 'atc', 'ic', 'purchases'] as const;
 type EditableField = (typeof EDITABLE_COLS)[number];
 
 interface RowDraft {
@@ -51,6 +51,7 @@ interface RowDraft {
   lpv: string;
   atc: string;
   ic: string;
+  purchases: string;
 }
 
 function toDraft(entry: AdsetEntry): RowDraft {
@@ -60,10 +61,18 @@ function toDraft(entry: AdsetEntry): RowDraft {
     lpv: entry.lpv ? String(entry.lpv) : '',
     atc: entry.atc ? String(entry.atc) : '',
     ic: entry.ic ? String(entry.ic) : '',
+    purchases: entry.purchases ? String(entry.purchases) : '',
   };
 }
 
-const EMPTY_DRAFT: RowDraft = { spend: '', clicks: '', lpv: '', atc: '', ic: '' };
+const EMPTY_DRAFT: RowDraft = {
+  spend: '',
+  clicks: '',
+  lpv: '',
+  atc: '',
+  ic: '',
+  purchases: '',
+};
 
 interface ExtraRow {
   tempId: string;
@@ -135,8 +144,9 @@ export function AdsetEntriesTable({
         lpv: a.lpv + e.lpv,
         atc: a.atc + e.atc,
         ic: a.ic + e.ic,
+        purchases: a.purchases + (e.purchases ?? 0),
       }),
-      { spend: 0, clicks: 0, lpv: 0, atc: 0, ic: 0 },
+      { spend: 0, clicks: 0, lpv: 0, atc: 0, ic: 0, purchases: 0 },
     );
     return {
       ...acc,
@@ -144,6 +154,7 @@ export function AdsetEntriesTable({
       lpvRate: lpvRate(acc.lpv, acc.clicks),
       atcRate: atcRate(acc.atc, acc.lpv),
       icRate: icRate(acc.ic, acc.atc),
+      purchaseRate: purchaseRate(acc.purchases, acc.ic),
     };
   }, [filtered]);
 
@@ -179,10 +190,13 @@ export function AdsetEntriesTable({
               <TableHead className="text-right">LPV</TableHead>
               <TableHead className="text-right">ATC</TableHead>
               <TableHead className="text-right">IC</TableHead>
+              <TableHead className="text-right">Purchases</TableHead>
               <TableHead className="text-right">CPC</TableHead>
+              <TableHead className="text-right">CTR%</TableHead>
               <TableHead className="text-right">LPV%</TableHead>
               <TableHead className="text-right">ATC%</TableHead>
               <TableHead className="text-right">IC%</TableHead>
+              <TableHead className="text-right">Conv%</TableHead>
               <TableHead className="w-8" />
               <TableHead className="w-10" />
             </TableRow>
@@ -217,7 +231,7 @@ export function AdsetEntriesTable({
               />
             ))}
             <TableRow>
-              <TableCell colSpan={12} className="py-2">
+              <TableCell colSpan={15} className="py-2">
                 <Button
                   type="button"
                   variant="ghost"
@@ -242,9 +256,11 @@ export function AdsetEntriesTable({
                 <TableCell className="text-right text-mono text-text">{totals.lpv}</TableCell>
                 <TableCell className="text-right text-mono text-text">{totals.atc}</TableCell>
                 <TableCell className="text-right text-mono text-text">{totals.ic}</TableCell>
+                <TableCell className="text-right text-mono text-text">{totals.purchases}</TableCell>
                 <TableCell className="text-right text-mono text-text">
                   {totals.clicks > 0 ? formatCurrency(totals.cpc) : '—'}
                 </TableCell>
+                <TableCell className="text-right text-mono text-text-muted">—</TableCell>
                 <TableCell
                   className={cn(
                     'text-right text-mono',
@@ -269,6 +285,9 @@ export function AdsetEntriesTable({
                 >
                   {totals.atc > 0 ? formatPercent(totals.icRate) : '—'}
                 </TableCell>
+                <TableCell className="text-right text-mono text-text">
+                  {totals.ic > 0 ? formatPercent(totals.purchaseRate) : '—'}
+                </TableCell>
                 <TableCell />
                 <TableCell />
               </TableRow>
@@ -292,6 +311,18 @@ export function AdsetEntriesTable({
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+function buildPayload(next: RowDraft): AdsetEntryInput {
+  const purchases = parseNum(next.purchases);
+  return {
+    spend: parseNum(next.spend),
+    clicks: Math.round(parseNum(next.clicks)),
+    lpv: Math.round(parseNum(next.lpv)),
+    atc: Math.round(parseNum(next.atc)),
+    ic: Math.round(parseNum(next.ic)),
+    ...(purchases > 0 ? { purchases: Math.round(purchases) } : {}),
+  };
+}
 
 function ExtraRowComponent({
   row,
@@ -332,13 +363,7 @@ function ExtraRowComponent({
   const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
-      await onSaveEntry(date, {
-        spend: parseNum(next.spend),
-        clicks: Math.round(parseNum(next.clicks)),
-        lpv: Math.round(parseNum(next.lpv)),
-        atc: Math.round(parseNum(next.atc)),
-        ic: Math.round(parseNum(next.ic)),
-      });
+      await onSaveEntry(date, buildPayload(next));
       setStatus('saved');
       if (fadeTimer.current) clearTimeout(fadeTimer.current);
       fadeTimer.current = setTimeout(() => setStatus('idle'), 1200);
@@ -374,86 +399,22 @@ function ExtraRowComponent({
     onDateChange(pendingDate);
   };
 
-  const spend = parseNum(draft.spend);
-  const clicks = parseNum(draft.clicks);
-  const lpv = parseNum(draft.lpv);
-  const atc = parseNum(draft.atc);
-  const ic = parseNum(draft.ic);
-
-  const cpc = clicks > 0 ? spend / clicks : 0;
-  const lpvR = lpvRate(lpv, clicks);
-  const atcR = atcRate(atc, lpv);
-  const icR = icRate(ic, atc);
-
-  const isToday = date === today;
-
   return (
-    <TableRow className={cn(isToday && 'bg-elevated/40')}>
-      <TableCell className="text-mono text-text">
-        <DateInput
-          value={pendingDate}
-          today={today}
-          onChange={setPendingDate}
-          onBlur={handleDateBlur}
-        />
-      </TableCell>
-
-      {EDITABLE_COLS.map((field, i) => (
-        <TableCell key={field} className="text-right">
-          <Input
-            ref={grid.getRef(row, i)}
-            type="number"
-            inputMode={field === 'spend' ? 'decimal' : 'numeric'}
-            step={field === 'spend' ? '0.01' : '1'}
-            min={0}
-            value={draft[field]}
-            placeholder="0"
-            onChange={(e) => handleChange(field, e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') handleEsc();
-              grid.onKeyDown(row, i)(e);
-            }}
-            aria-label={`${field} on ${date}`}
-            className="h-8 w-24 px-2 text-right text-mono"
-          />
-        </TableCell>
-      ))}
-
-      <TableCell className="text-right text-mono text-text">
-        {clicks > 0 ? formatCurrency(cpc) : '—'}
-      </TableCell>
-      <TableCell
-        className={cn(
-          'text-right text-mono',
-          clicks > 0 ? TONE_TEXT_CLASS[rateTone(lpvR, HEALTHY_LPV_RATE)] : 'text-text-muted',
-        )}
-      >
-        {clicks > 0 ? formatPercent(lpvR) : '—'}
-      </TableCell>
-      <TableCell
-        className={cn(
-          'text-right text-mono',
-          lpv > 0 ? TONE_TEXT_CLASS[rateTone(atcR, HEALTHY_ATC_RATE)] : 'text-text-muted',
-        )}
-      >
-        {lpv > 0 ? formatPercent(atcR) : '—'}
-      </TableCell>
-      <TableCell
-        className={cn(
-          'text-right text-mono',
-          atc > 0 ? TONE_TEXT_CLASS[rateTone(icR, HEALTHY_IC_RATE)] : 'text-text-muted',
-        )}
-      >
-        {atc > 0 ? formatPercent(icR) : '—'}
-      </TableCell>
-
-      <TableCell className="w-8 text-center">
-        <SaveIndicator status={status} />
-      </TableCell>
-
-      <TableCell className="w-10 text-right">
-        {!isToday && (
+    <Row
+      isToday={date === today}
+      today={today}
+      pendingDate={pendingDate}
+      setPendingDate={setPendingDate}
+      onDateBlur={handleDateBlur}
+      draft={draft}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onEsc={handleEsc}
+      grid={grid}
+      row={row}
+      status={status}
+      actionsCell={
+        date !== today && (
           <Button
             type="button"
             variant="ghost"
@@ -464,9 +425,10 @@ function ExtraRowComponent({
           >
             <Trash2 className="size-4" />
           </Button>
-        )}
-      </TableCell>
-    </TableRow>
+        )
+      }
+      ariaDate={date}
+    />
   );
 }
 
@@ -502,7 +464,15 @@ function SavedEntryRow({
     setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
     setPendingDate(entry.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry.spend, entry.clicks, entry.lpv, entry.atc, entry.ic, entry.date]);
+  }, [
+    entry.spend,
+    entry.clicks,
+    entry.lpv,
+    entry.atc,
+    entry.ic,
+    entry.purchases,
+    entry.date,
+  ]);
 
   useEffect(
     () => () => {
@@ -515,13 +485,7 @@ function SavedEntryRow({
   const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
-      await onSaveEntry(entry.date, {
-        spend: parseNum(next.spend),
-        clicks: Math.round(parseNum(next.clicks)),
-        lpv: Math.round(parseNum(next.lpv)),
-        atc: Math.round(parseNum(next.atc)),
-        ic: Math.round(parseNum(next.ic)),
-      });
+      await onSaveEntry(entry.date, buildPayload(next));
       setStatus('saved');
       if (fadeTimer.current) clearTimeout(fadeTimer.current);
       fadeTimer.current = setTimeout(() => setStatus('idle'), 1200);
@@ -557,13 +521,7 @@ function SavedEntryRow({
     }
     setStatus('saving');
     try {
-      await onSaveEntry(pendingDate, {
-        spend: parseNum(draft.spend),
-        clicks: Math.round(parseNum(draft.clicks)),
-        lpv: Math.round(parseNum(draft.lpv)),
-        atc: Math.round(parseNum(draft.atc)),
-        ic: Math.round(parseNum(draft.ic)),
-      });
+      await onSaveEntry(pendingDate, buildPayload(draft));
       await onDeleteEntry(entry.date);
       setStatus('saved');
     } catch {
@@ -572,18 +530,79 @@ function SavedEntryRow({
     }
   };
 
+  return (
+    <Row
+      isToday={entry.date === today}
+      today={today}
+      pendingDate={pendingDate}
+      setPendingDate={setPendingDate}
+      onDateBlur={handleDateBlur}
+      draft={draft}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onEsc={handleEsc}
+      grid={grid}
+      row={row}
+      status={status}
+      actionsCell={
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Delete entry for ${entry.date}`}
+          onClick={onDeleteRequest}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      }
+      ariaDate={entry.date}
+    />
+  );
+}
+
+function Row({
+  isToday,
+  today,
+  pendingDate,
+  setPendingDate,
+  onDateBlur,
+  draft,
+  onChange,
+  onBlur,
+  onEsc,
+  grid,
+  row,
+  status,
+  actionsCell,
+  ariaDate,
+}: {
+  isToday: boolean;
+  today: string;
+  pendingDate: string;
+  setPendingDate: (v: string) => void;
+  onDateBlur: () => void;
+  draft: RowDraft;
+  onChange: (field: EditableField, raw: string) => void;
+  onBlur: () => void;
+  onEsc: () => void;
+  grid: ReturnType<typeof useGridNavigation>;
+  row: number;
+  status: SaveStatus;
+  actionsCell: React.ReactNode;
+  ariaDate: string;
+}) {
   const spend = parseNum(draft.spend);
   const clicks = parseNum(draft.clicks);
   const lpv = parseNum(draft.lpv);
   const atc = parseNum(draft.atc);
   const ic = parseNum(draft.ic);
+  const purchases = parseNum(draft.purchases);
 
   const cpc = clicks > 0 ? spend / clicks : 0;
   const lpvR = lpvRate(lpv, clicks);
   const atcR = atcRate(atc, lpv);
   const icR = icRate(ic, atc);
-
-  const isToday = entry.date === today;
+  const convR = purchaseRate(purchases, ic);
 
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
@@ -592,7 +611,7 @@ function SavedEntryRow({
           value={pendingDate}
           today={today}
           onChange={setPendingDate}
-          onBlur={handleDateBlur}
+          onBlur={onDateBlur}
         />
       </TableCell>
 
@@ -606,13 +625,13 @@ function SavedEntryRow({
             min={0}
             value={draft[field]}
             placeholder="0"
-            onChange={(e) => handleChange(field, e.target.value)}
-            onBlur={handleBlur}
+            onChange={(e) => onChange(field, e.target.value)}
+            onBlur={onBlur}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') handleEsc();
+              if (e.key === 'Escape') onEsc();
               grid.onKeyDown(row, i)(e);
             }}
-            aria-label={`${field} on ${entry.date}`}
+            aria-label={`${field} on ${ariaDate}`}
             className="h-8 w-24 px-2 text-right text-mono"
           />
         </TableCell>
@@ -620,6 +639,12 @@ function SavedEntryRow({
 
       <TableCell className="text-right text-mono text-text">
         {clicks > 0 ? formatCurrency(cpc) : '—'}
+      </TableCell>
+      <TableCell
+        className="text-right text-mono text-text-muted"
+        title="CTR needs impressions, which we don't track yet"
+      >
+        —
       </TableCell>
       <TableCell
         className={cn(
@@ -645,22 +670,20 @@ function SavedEntryRow({
       >
         {atc > 0 ? formatPercent(icR) : '—'}
       </TableCell>
+      <TableCell
+        className={cn(
+          'text-right text-mono',
+          ic > 0 ? 'text-text' : 'text-text-muted',
+        )}
+      >
+        {ic > 0 ? formatPercent(convR) : '—'}
+      </TableCell>
 
       <TableCell className="w-8 text-center">
         <SaveIndicator status={status} />
       </TableCell>
 
-      <TableCell className="w-10 text-right">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={`Delete entry for ${entry.date}`}
-          onClick={onDeleteRequest}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </TableCell>
+      <TableCell className="w-10 text-right">{actionsCell}</TableCell>
     </TableRow>
   );
 }
