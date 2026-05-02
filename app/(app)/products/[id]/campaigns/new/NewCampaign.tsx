@@ -3,25 +3,24 @@
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { useProduct } from '@/hooks/useProduct';
-import { AdsetForm } from '@/components/forms/AdsetForm';
+import { CampaignForm } from '@/components/forms/CampaignForm';
 import { Skeleton } from '@/components/ui/skeleton';
-import { createAdset } from '@/lib/firebase/adsets';
-import type { AdsetInput } from '@/types/adset';
+import { createCampaign } from '@/lib/firebase/campaigns';
+import type { CampaignInput } from '@/types/campaign';
 
-interface NewAdsetProps {
+interface NewCampaignProps {
   productId: string;
 }
 
-export function NewAdset({ productId }: NewAdsetProps) {
+export function NewCampaign({ productId }: NewCampaignProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: product, loading } = useProduct(productId);
 
-  const handleSubmit = async (data: AdsetInput) => {
+  const handleSubmit = async (data: CampaignInput) => {
     if (!user) return;
-    // FIXME(refactor-1b): createAdset now takes (uid, productId, campaignId, input). Route shape needs a [campaignId] segment.
-    await createAdset(user.uid, productId, data);
-    router.push(`/products/${productId}`);
+    const id = await createCampaign(user.uid, productId, data);
+    router.push(`/products/${productId}/campaigns/${id}`);
   };
 
   if (loading || !product) {
@@ -36,14 +35,13 @@ export function NewAdset({ productId }: NewAdsetProps) {
   return (
     <section className="mx-auto w-full max-w-xl space-y-6">
       <header>
-        <h1 className="text-heading text-text">New adset</h1>
+        <h1 className="text-heading text-text">New campaign</h1>
         <p className="text-body text-text-muted">For {product.name}</p>
       </header>
-      <AdsetForm
-        productName={product.name}
+      <CampaignForm
         onSubmit={handleSubmit}
         onCancel={() => router.push(`/products/${productId}`)}
-        submitLabel="Create adset"
+        submitLabel="Create campaign"
       />
     </section>
   );

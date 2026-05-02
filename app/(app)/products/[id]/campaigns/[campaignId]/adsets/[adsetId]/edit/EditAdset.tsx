@@ -11,21 +11,20 @@ import type { AdsetInput } from '@/types/adset';
 
 interface EditAdsetProps {
   productId: string;
+  campaignId: string;
   adsetId: string;
 }
 
-export function EditAdset({ productId, adsetId }: EditAdsetProps) {
+export function EditAdset({ productId, campaignId, adsetId }: EditAdsetProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: product } = useProduct(productId);
-  // FIXME(refactor-1b): useAdset and updateAdset both need a campaignId. Route should be /products/[id]/campaigns/[campaignId]/adsets/[adsetId]/edit.
-  const { data: adset, loading, error } = useAdset(productId, adsetId);
+  const { data: adset, loading, error } = useAdset(productId, campaignId, adsetId);
 
   const handleSubmit = async (data: AdsetInput) => {
     if (!user) return;
-    // FIXME(refactor-1b): updateAdset now takes (uid, productId, campaignId, adsetId, input).
-    await updateAdset(user.uid, productId, adsetId, data);
-    router.push(`/products/${productId}/adsets/${adsetId}`);
+    await updateAdset(user.uid, productId, campaignId, adsetId, data);
+    router.push(`/products/${productId}/campaigns/${campaignId}`);
   };
 
   if (loading || !product) {
@@ -62,7 +61,9 @@ export function EditAdset({ productId, adsetId }: EditAdsetProps) {
           budget: adset.budget,
         }}
         onSubmit={handleSubmit}
-        onCancel={() => router.push(`/products/${productId}/adsets/${adsetId}`)}
+        onCancel={() =>
+          router.push(`/products/${productId}/campaigns/${campaignId}`)
+        }
         submitLabel="Save changes"
       />
     </section>

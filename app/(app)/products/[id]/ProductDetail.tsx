@@ -2,24 +2,20 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { Plus, FolderKanban } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useProduct } from '@/hooks/useProduct';
-// FIXME(refactor-1b): useProductEntries was deleted — switch to useCampaignEntries(productId, campaignId).
-import { useProductEntries } from '@/hooks/useProductEntries';
-// FIXME(refactor-1b): useProductEntryMutations was renamed — use useCampaignEntryMutations(productId, campaignId).
-import { useProductEntryMutations } from '@/hooks/useProductEntryMutations';
-import { useAdsets } from '@/hooks/useAdsets';
-import { useAllAdsetEntries } from '@/hooks/useAllAdsetEntries';
-import { buttonVariants } from '@/components/ui/button';
+import { useCampaigns } from '@/hooks/useCampaigns';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { EmptyState } from '@/components/EmptyState';
+import { CampaignCard } from '@/components/CampaignCard';
+import { ProductKPISummary } from '@/components/ProductKPISummary';
 import { ProductHeader } from './ProductHeader';
-import { ProductOverview } from './ProductOverview';
-import { ProductTabs } from './ProductTabs';
 import { deleteProduct } from '@/lib/firebase/products';
-import { deleteAdset } from '@/lib/firebase/adsets';
-import { getBrowserTimezone } from '@/lib/utils/date';
+import { deleteCampaign } from '@/lib/firebase/campaigns';
 
 interface ProductDetailProps {
   productId: string;
@@ -29,15 +25,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: product, loading, error } = useProduct(productId);
-  // FIXME(refactor-1b): page must select/derive a campaignId before reading entries; entries now scoped to campaign.
-  const { data: entries } = useProductEntries(productId);
-  // FIXME(refactor-1b): useAdsets now requires (productId, campaignId).
-  const { data: adsets, loading: adsetsLoading } = useAdsets(productId);
-  const adsetIds = useMemo(() => adsets.map((a) => a.id), [adsets]);
-  // FIXME(refactor-1b): useAllAdsetEntries now requires (productId, campaignId, adsetIds).
-  const { byAdsetId } = useAllAdsetEntries(productId, adsetIds);
-  // FIXME(refactor-1b): swap for useCampaignEntryMutations(productId, campaignId).
-  const { saveEntry, deleteEntry } = useProductEntryMutations(productId);
+  const { data: campaigns, loading: campaignsLoading } = useCampaigns(productId);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (loading) {
@@ -74,38 +62,70 @@ export function ProductDetail({ productId }: ProductDetailProps) {
     router.push('/');
   };
 
-  const handleDeleteAdset = async (adsetId: string) => {
+  const handleDeleteCampaign = async (campaignId: string) => {
     if (!user) return;
-    // FIXME(refactor-1b): deleteAdset now requires (uid, productId, campaignId, adsetId).
-    await deleteAdset(user.uid, productId, adsetId);
+    await deleteCampaign(user.uid, productId, campaignId);
   };
 
   return (
     <section className="mx-auto w-full max-w-6xl space-y-8">
       <ProductHeader product={product} onDeleteClick={() => setConfirmOpen(true)} />
 
-      <ProductOverview
-        productEntries={entries}
-        adsetEntriesByAdsetId={byAdsetId}
+      <ProductKPISummary
+        productId={productId}
+        campaigns={campaigns}
         targetCPA={product.targetCPA}
       />
 
-      <ProductTabs
-        product={product}
-        entries={entries}
-        adsets={adsets}
-        adsetsLoading={adsetsLoading}
-        timezone={getBrowserTimezone()}
-        onSaveEntry={saveEntry}
-        onDeleteEntry={deleteEntry}
-        onDeleteAdset={handleDeleteAdset}
-      />
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-heading text-text">Campaigns</h2>
+          <Link
+            href={`/products/${productId}/campaigns/new`}
+            className={buttonVariants({ variant: 'default', size: 'sm' })}
+          >
+            <Plus className="size-4" />
+            New campaign
+          </Link>
+        </div>
+
+        {campaignsLoading ? (
+          <Skeleton className="h-32" />
+        ) : campaigns.length === 0 ? (
+          <EmptyState
+            icon={FolderKanban}
+            title="No campaigns yet"
+            description="Campaigns hold the daily entries and verdict for one ad test. Start one to begin tracking."
+            action={
+              <Link
+                href={`/products/${productId}/campaigns/new`}
+                className={buttonVariants({ variant: 'default' })}
+              >
+                <Plus className="size-4" />
+                Create your first campaign
+              </Link>
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            {campaigns.map((c) => (
+              <CampaignCard
+                key={c.id}
+                productId={productId}
+                campaign={c}
+                targetCPA={product.targetCPA}
+                onDelete={handleDeleteCampaign}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete "${product.name}"?`}
-        description="This will permanently delete the product. All adsets and daily entries under it will also be deleted."
+        description="This will permanently delete the product. All campaigns, adsets, and daily entries under it will also be deleted."
         onConfirm={handleDeleteProduct}
       />
     </section>

@@ -5,11 +5,13 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  getDocs,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './config';
 import { paths } from './paths';
 import { toProduct } from './converters';
+import { deleteCampaign } from './campaigns';
 import type { Product, ProductInput } from '@/types/product';
 
 export async function createProduct(uid: string, input: ProductInput): Promise<string> {
@@ -32,12 +34,17 @@ export async function updateProduct(
   await updateDoc(ref, { ...input, updatedAt: serverTimestamp() });
 }
 
-// TODO: Firestore does not delete subcollections when a parent doc is deleted.
-// Adsets, entries, and diagnoses under this product remain orphaned.
-// Before launch, replace with a Cloud Function or batched recursive delete.
+/**
+ * Delete a product and every nested campaign (which itself recursively
+ * cleans its adsets, entries, and diagnoses). The Firestore client SDK
+ * has no native recursive delete, so we walk the tree.
+ */
 export async function deleteProduct(uid: string, productId: string): Promise<void> {
-  const ref = doc(db, paths.product(uid, productId));
-  await deleteDoc(ref);
+  const campaignsSnap = await getDocs(collection(db, paths.campaigns(uid, productId)));
+  for (const c of campaignsSnap.docs) {
+    await deleteCampaign(uid, productId, c.id);
+  }
+  await deleteDoc(doc(db, paths.product(uid, productId)));
 }
 
 export async function getProduct(uid: string, productId: string): Promise<Product | null> {
