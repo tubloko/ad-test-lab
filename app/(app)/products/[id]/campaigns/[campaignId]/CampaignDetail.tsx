@@ -25,6 +25,7 @@ import { NewAdsetDialog } from '@/components/forms/NewAdsetDialog';
 import { EditCampaignDialog } from '@/components/forms/EditCampaignDialog';
 import { SpendVsRevenueChart } from '@/components/charts/SpendVsRevenueChart';
 import { CPATrendChart } from '@/components/charts/CPATrendChart';
+import { AdsetTrendChart } from '@/components/charts/AdsetTrendChart';
 import { deleteCampaign, updateCampaign } from '@/lib/firebase/campaigns';
 import { createAdset, deleteAdset, updateAdset } from '@/lib/firebase/adsets';
 import type { AdsetInput } from '@/types/adset';
@@ -255,6 +256,13 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
           toDate={today}
         />
       </section>
+
+      <AdsetTrendChart
+        adsets={adsets}
+        byAdsetId={byAdsetId}
+        fromDate={fromDate}
+        toDate={today}
+      />
 
       <ConfirmDialog
         open={confirmOpen}
