@@ -402,7 +402,9 @@ function ExtraRowComponent({
 
   const handleChange = (field: EditableField, raw: string) => {
     const next = { ...draft, [field]: raw };
-    if (field === 'spend') next.spendOverride = true;
+    if (field === 'spend') {
+      next.spendOverride = isManualSpend(raw, adsetSpendSum);
+    }
     setDraft(next);
     scheduleSave(next);
   };
@@ -629,7 +631,9 @@ function SavedEntryRow({
 
   const handleChange = (field: EditableField, raw: string) => {
     const next = { ...draft, [field]: raw };
-    if (field === 'spend') next.spendOverride = true;
+    if (field === 'spend') {
+      next.spendOverride = isManualSpend(raw, entry.adsetSpendSum);
+    }
     setDraft(next);
     scheduleSave(next);
   };
@@ -898,4 +902,16 @@ function dirtyFieldsOnly(current: RowDraft, initial: RowDraft): Partial<RowDraft
 
 function isValidDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+/**
+ * Treat the spend cell as a manual override only when the user has typed a
+ * non-empty value AND that value differs from the auto-fill from adsets.
+ * Empty input or value-matching-auto are both treated as auto, so users
+ * don't accidentally lock in '0' just by tabbing through.
+ */
+function isManualSpend(raw: string, adsetSpendSum: number): boolean {
+  const trimmed = raw.trim();
+  if (trimmed === '') return false;
+  return Math.abs(parseNum(trimmed) - adsetSpendSum) > 0.005;
 }
