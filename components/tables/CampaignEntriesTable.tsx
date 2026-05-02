@@ -151,17 +151,30 @@ export function CampaignEntriesTable({
     }
   };
 
-  // Old → new (ascending). Today's row ends up at the bottom.
-  const sortedExtras = useMemo(
-    () => [...extras].sort((a, b) => a.date.localeCompare(b.date)),
-    [extras],
-  );
-  const sortedEntries = useMemo(
-    () => [...filtered].sort((a, b) => a.date.localeCompare(b.date)),
-    [filtered],
-  );
+  // Single date-sorted list (old → new). Extras and saved entries share
+  // one stable ordering so a row never jumps when it transitions from
+  // local-draft to saved. Each visible row gets its grid index from this
+  // list.
+  type Row =
+    | { kind: 'extra'; date: string; tempId: string }
+    | { kind: 'saved'; date: string; entry: EnrichedCampaignEntry };
+  const allRows = useMemo<Row[]>(() => {
+    const fromExtras: Row[] = extras.map((r) => ({
+      kind: 'extra',
+      date: r.date,
+      tempId: r.tempId,
+    }));
+    const fromEntries: Row[] = filtered.map((e) => ({
+      kind: 'saved',
+      date: e.date,
+      entry: e,
+    }));
+    return [...fromExtras, ...fromEntries].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+  }, [extras, filtered]);
 
-  const totalRows = sortedExtras.length + sortedEntries.length;
+  const totalRows = allRows.length;
   const grid = useGridNavigation({
     rowCount: totalRows,
     colCount: EDITABLE_COLS.length,
@@ -203,36 +216,15 @@ export function CampaignEntriesTable({
     };
   }, [filtered, adsetSpendByDate, fromDate, today]);
 
-  const usedDates = useMemo(() => {
-    const s = new Set<string>();
-    for (const e of entries) s.add(e.date);
-    for (const r of extras) s.add(r.date);
-    return s;
-  }, [entries, extras]);
-
-  const handleExtraDateChange = (tempId: string, newDate: string) => {
-    setExtras((prev) =>
-      prev.map((r) => (r.tempId === tempId ? { ...r, date: newDate } : r)),
-    );
-  };
-
-  // After we add a backfilled row, focus its spend cell. Run once the
-  // newly-added extra appears in sortedExtras (which it always will, since
-  // we just pushed it into state).
+  // After we add a backfilled row (or detect duplicate), focus its spend cell.
   useEffect(() => {
     if (!pendingFocusDate) return;
-    const eIdx = sortedExtras.findIndex((r) => r.date === pendingFocusDate);
-    if (eIdx >= 0) {
-      grid.focusCell(eIdx, 0);
-      setPendingFocusDate(null);
-      return;
-    }
-    const sIdx = sortedEntries.findIndex((e) => e.date === pendingFocusDate);
-    if (sIdx >= 0) {
-      grid.focusCell(sIdx + sortedExtras.length, 0);
+    const idx = allRows.findIndex((r) => r.date === pendingFocusDate);
+    if (idx >= 0) {
+      grid.focusCell(idx, 0);
       setPendingFocusDate(null);
     }
-  }, [pendingFocusDate, sortedExtras, sortedEntries, grid]);
+  }, [pendingFocusDate, allRows, grid]);
 
   const hasHistorical =
     entries.some((e) => e.date !== today) || extras.some((r) => r.date !== today);
@@ -274,37 +266,34 @@ export function CampaignEntriesTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedExtras.map((extra, idx) => (
-              <ExtraRowComponent
-                key={extra.tempId}
-                row={idx}
-                today={today}
-                date={extra.date}
-                adsetSpendSum={adsetSpendByDate.get(extra.date) ?? 0}
-                targetCPA={targetCPA}
-                grid={grid}
-                usedDates={usedDates}
-                onSaveEntry={onSaveEntry}
-                onDateChange={(d) => handleExtraDateChange(extra.tempId, d)}
-                onRemoveExtra={() =>
-                  setExtras((prev) => prev.filter((r) => r.tempId !== extra.tempId))
-                }
-              />
-            ))}
-            {sortedEntries.map((entry, idx) => (
-              <SavedEntryRow
-                key={entry.date}
-                row={idx + sortedExtras.length}
-                today={today}
-                entry={entry}
-                targetCPA={targetCPA}
-                grid={grid}
-                usedDates={usedDates}
-                onSaveEntry={onSaveEntry}
-                onDeleteEntry={onDeleteEntry}
-                onDeleteRequest={() => setPendingDelete(entry.date)}
-              />
-            ))}
+            {allRows.map((r, idx) =>
+              r.kind === 'extra' ? (
+                <ExtraRowComponent
+                  key={r.tempId}
+                  row={idx}
+                  today={today}
+                  date={r.date}
+                  adsetSpendSum={adsetSpendByDate.get(r.date) ?? 0}
+                  targetCPA={targetCPA}
+                  grid={grid}
+                  onSaveEntry={onSaveEntry}
+                  onRemoveExtra={() =>
+                    setExtras((prev) => prev.filter((x) => x.tempId !== r.tempId))
+                  }
+                />
+              ) : (
+                <SavedEntryRow
+                  key={r.date}
+                  row={idx}
+                  today={today}
+                  entry={r.entry}
+                  targetCPA={targetCPA}
+                  grid={grid}
+                  onSaveEntry={onSaveEntry}
+                  onDeleteRequest={() => setPendingDelete(r.date)}
+                />
+              ),
+            )}
           </TableBody>
           {filtered.length > 0 && (
             <TableFooter>
@@ -395,9 +384,7 @@ interface ExtraRowProps {
   adsetSpendSum: number;
   targetCPA: number;
   grid: ReturnType<typeof useGridNavigation>;
-  usedDates: Set<string>;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
-  onDateChange: (date: string) => void;
   onRemoveExtra: () => void;
 }
 
@@ -408,9 +395,7 @@ function ExtraRowComponent({
   adsetSpendSum,
   targetCPA,
   grid,
-  usedDates,
   onSaveEntry,
-  onDateChange,
   onRemoveExtra,
 }: ExtraRowProps) {
   const [draft, setDraft] = useState<RowDraft>(EMPTY_DRAFT);
@@ -418,9 +403,6 @@ function ExtraRowComponent({
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pendingDate, setPendingDate] = useState<string>(date);
-
-  useEffect(() => setPendingDate(date), [date]);
 
   useEffect(
     () => () => {
@@ -469,15 +451,6 @@ function ExtraRowComponent({
 
   const handleEsc = () => setDraft(initialRef.current);
 
-  const handleDateBlur = () => {
-    if (pendingDate === date) return;
-    if (!isValidDate(pendingDate) || (usedDates.has(pendingDate) && pendingDate !== date)) {
-      setPendingDate(date);
-      return;
-    }
-    onDateChange(pendingDate);
-  };
-
   const orders = Math.round(parseNum(draft.orders));
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
@@ -496,13 +469,10 @@ function ExtraRowComponent({
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
       <TableCell className="text-mono text-text">
-        <DateInput
-          value={pendingDate}
+        <DateCell
+          date={date}
           today={today}
-          editable={!isToday}
           showDraftPill={!isToday && isUntouched}
-          onChange={setPendingDate}
-          onBlur={handleDateBlur}
         />
       </TableCell>
 
@@ -576,9 +546,7 @@ interface SavedEntryRowProps {
   entry: EnrichedCampaignEntry;
   targetCPA: number;
   grid: ReturnType<typeof useGridNavigation>;
-  usedDates: Set<string>;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
-  onDeleteEntry: (date: string) => Promise<void>;
   onDeleteRequest: () => void;
 }
 
@@ -588,9 +556,7 @@ function SavedEntryRow({
   entry,
   targetCPA,
   grid,
-  usedDates,
   onSaveEntry,
-  onDeleteEntry,
   onDeleteRequest,
 }: SavedEntryRowProps) {
   const [draft, setDraft] = useState<RowDraft>(() => toDraft(entry));
@@ -598,13 +564,11 @@ function SavedEntryRow({
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pendingDate, setPendingDate] = useState<string>(entry.date);
 
   useEffect(() => {
     const next = toDraft(entry);
     initialRef.current = next;
     setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
-    setPendingDate(entry.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.spend, entry.revenue, entry.orders, entry.cogs, entry.date]);
 
@@ -655,30 +619,6 @@ function SavedEntryRow({
 
   const handleEsc = () => setDraft(initialRef.current);
 
-  const handleDateBlur = async () => {
-    if (pendingDate === entry.date) return;
-    const taken = usedDates.has(pendingDate) && pendingDate !== entry.date;
-    if (!isValidDate(pendingDate) || taken) {
-      setPendingDate(entry.date);
-      return;
-    }
-    setStatus('saving');
-    try {
-      await onSaveEntry(pendingDate, {
-        spend: parseNum(draft.spend),
-        revenue: parseNum(draft.revenue),
-        orders: Math.round(parseNum(draft.orders)),
-        cogs: parseNum(draft.cogs),
-        spendOverride: false,
-      });
-      await onDeleteEntry(entry.date);
-      setStatus('saved');
-    } catch {
-      setStatus('error');
-      setPendingDate(entry.date);
-    }
-  };
-
   const orders = Math.round(parseNum(draft.orders));
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
@@ -692,13 +632,7 @@ function SavedEntryRow({
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
       <TableCell className="text-mono text-text">
-        <DateInput
-          value={pendingDate}
-          today={today}
-          editable={!isToday}
-          onChange={setPendingDate}
-          onBlur={handleDateBlur}
-        />
+        <DateCell date={entry.date} today={today} />
       </TableCell>
 
       {EDITABLE_COLS.map((field, i) => (
@@ -764,39 +698,19 @@ function SavedEntryRow({
   );
 }
 
-function DateInput({
-  value,
+function DateCell({
+  date,
   today,
-  editable = true,
   showDraftPill = false,
-  onChange,
-  onBlur,
 }: {
-  value: string;
+  date: string;
   today: string;
-  editable?: boolean;
   showDraftPill?: boolean;
-  onChange: (v: string) => void;
-  onBlur: () => void;
 }) {
   return (
     <div className="inline-flex items-center gap-1.5">
-      {editable ? (
-        <Input
-          type="date"
-          value={value}
-          max={subtractDays(today, 1)}
-          min={subtractDays(today, 365)}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          className="h-8 w-36 px-2 text-mono"
-        />
-      ) : (
-        <span className="inline-flex h-8 items-center px-2 text-mono">
-          {formatDate(value)}
-        </span>
-      )}
-      {value === today && (
+      <span className="inline-flex h-8 items-center text-mono">{formatDate(date)}</span>
+      {date === today && (
         <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-caption text-primary">
           today
         </span>
@@ -890,6 +804,3 @@ function dirtyFieldsOnly(current: RowDraft, initial: RowDraft): Partial<RowDraft
   return out;
 }
 
-function isValidDate(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s);
-}

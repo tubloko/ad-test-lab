@@ -148,17 +148,29 @@ export function AdsetEntriesTable({
     }
   };
 
-  // Old → new (ascending). Today's row sits at the bottom.
-  const sortedExtras = useMemo(
-    () => [...extras].sort((a, b) => a.date.localeCompare(b.date)),
-    [extras],
-  );
-  const sortedEntries = useMemo(
-    () => [...filtered].sort((a, b) => a.date.localeCompare(b.date)),
-    [filtered],
-  );
+  // Single date-sorted list (old → new). Extras and saved entries share
+  // one stable ordering so a row never jumps when it transitions from
+  // local-draft to saved.
+  type Row =
+    | { kind: 'extra'; date: string; tempId: string }
+    | { kind: 'saved'; date: string; entry: AdsetEntry };
+  const allRows = useMemo<Row[]>(() => {
+    const fromExtras: Row[] = extras.map((r) => ({
+      kind: 'extra',
+      date: r.date,
+      tempId: r.tempId,
+    }));
+    const fromEntries: Row[] = filtered.map((e) => ({
+      kind: 'saved',
+      date: e.date,
+      entry: e,
+    }));
+    return [...fromExtras, ...fromEntries].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+  }, [extras, filtered]);
 
-  const totalRows = sortedExtras.length + sortedEntries.length;
+  const totalRows = allRows.length;
   const grid = useGridNavigation({
     rowCount: totalRows,
     colCount: EDITABLE_COLS.length,
@@ -186,33 +198,14 @@ export function AdsetEntriesTable({
     };
   }, [filtered]);
 
-  const usedDates = useMemo(() => {
-    const s = new Set<string>();
-    for (const e of entries) s.add(e.date);
-    for (const r of extras) s.add(r.date);
-    return s;
-  }, [entries, extras]);
-
-  const handleExtraDateChange = (tempId: string, newDate: string) => {
-    setExtras((prev) =>
-      prev.map((r) => (r.tempId === tempId ? { ...r, date: newDate } : r)),
-    );
-  };
-
   useEffect(() => {
     if (!pendingFocusDate) return;
-    const eIdx = sortedExtras.findIndex((r) => r.date === pendingFocusDate);
-    if (eIdx >= 0) {
-      grid.focusCell(eIdx, 0);
-      setPendingFocusDate(null);
-      return;
-    }
-    const sIdx = sortedEntries.findIndex((e) => e.date === pendingFocusDate);
-    if (sIdx >= 0) {
-      grid.focusCell(sIdx + sortedExtras.length, 0);
+    const idx = allRows.findIndex((r) => r.date === pendingFocusDate);
+    if (idx >= 0) {
+      grid.focusCell(idx, 0);
       setPendingFocusDate(null);
     }
-  }, [pendingFocusDate, sortedExtras, sortedEntries, grid]);
+  }, [pendingFocusDate, allRows, grid]);
 
   const hasHistorical =
     entries.some((e) => e.date !== today) || extras.some((r) => r.date !== today);
@@ -259,34 +252,31 @@ export function AdsetEntriesTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedExtras.map((extra, idx) => (
-              <ExtraRowComponent
-                key={extra.tempId}
-                row={idx}
-                today={today}
-                date={extra.date}
-                grid={grid}
-                usedDates={usedDates}
-                onSaveEntry={onSaveEntry}
-                onDateChange={(d) => handleExtraDateChange(extra.tempId, d)}
-                onRemoveExtra={() =>
-                  setExtras((prev) => prev.filter((r) => r.tempId !== extra.tempId))
-                }
-              />
-            ))}
-            {sortedEntries.map((entry, idx) => (
-              <SavedEntryRow
-                key={entry.date}
-                row={idx + sortedExtras.length}
-                today={today}
-                entry={entry}
-                grid={grid}
-                usedDates={usedDates}
-                onSaveEntry={onSaveEntry}
-                onDeleteEntry={onDeleteEntry}
-                onDeleteRequest={() => setPendingDelete(entry.date)}
-              />
-            ))}
+            {allRows.map((r, idx) =>
+              r.kind === 'extra' ? (
+                <ExtraRowComponent
+                  key={r.tempId}
+                  row={idx}
+                  today={today}
+                  date={r.date}
+                  grid={grid}
+                  onSaveEntry={onSaveEntry}
+                  onRemoveExtra={() =>
+                    setExtras((prev) => prev.filter((x) => x.tempId !== r.tempId))
+                  }
+                />
+              ) : (
+                <SavedEntryRow
+                  key={r.date}
+                  row={idx}
+                  today={today}
+                  entry={r.entry}
+                  grid={grid}
+                  onSaveEntry={onSaveEntry}
+                  onDeleteRequest={() => setPendingDelete(r.date)}
+                />
+              ),
+            )}
           </TableBody>
           {filtered.length > 0 && (
             <TableFooter>
@@ -388,18 +378,14 @@ function ExtraRowComponent({
   today,
   date,
   grid,
-  usedDates,
   onSaveEntry,
-  onDateChange,
   onRemoveExtra,
 }: {
   row: number;
   today: string;
   date: string;
   grid: ReturnType<typeof useGridNavigation>;
-  usedDates: Set<string>;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
-  onDateChange: (date: string) => void;
   onRemoveExtra: () => void;
 }) {
   const [draft, setDraft] = useState<RowDraft>(EMPTY_DRAFT);
@@ -407,9 +393,6 @@ function ExtraRowComponent({
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pendingDate, setPendingDate] = useState<string>(date);
-
-  useEffect(() => setPendingDate(date), [date]);
 
   useEffect(
     () => () => {
@@ -449,15 +432,6 @@ function ExtraRowComponent({
 
   const handleEsc = () => setDraft(initialRef.current);
 
-  const handleDateBlur = () => {
-    if (pendingDate === date) return;
-    if (!isValidDate(pendingDate) || (usedDates.has(pendingDate) && pendingDate !== date)) {
-      setPendingDate(date);
-      return;
-    }
-    onDateChange(pendingDate);
-  };
-
   const isUntouched =
     draft.spend === '' &&
     draft.clicks === '' &&
@@ -470,9 +444,7 @@ function ExtraRowComponent({
     <Row
       isToday={date === today}
       today={today}
-      pendingDate={pendingDate}
-      setPendingDate={setPendingDate}
-      onDateBlur={handleDateBlur}
+      date={date}
       draft={draft}
       onChange={handleChange}
       onBlur={handleBlur}
@@ -505,18 +477,14 @@ function SavedEntryRow({
   today,
   entry,
   grid,
-  usedDates,
   onSaveEntry,
-  onDeleteEntry,
   onDeleteRequest,
 }: {
   row: number;
   today: string;
   entry: AdsetEntry;
   grid: ReturnType<typeof useGridNavigation>;
-  usedDates: Set<string>;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
-  onDeleteEntry: (date: string) => Promise<void>;
   onDeleteRequest: () => void;
 }) {
   const [draft, setDraft] = useState<RowDraft>(() => toDraft(entry));
@@ -524,13 +492,11 @@ function SavedEntryRow({
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pendingDate, setPendingDate] = useState<string>(entry.date);
 
   useEffect(() => {
     const next = toDraft(entry);
     initialRef.current = next;
     setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
-    setPendingDate(entry.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     entry.spend,
@@ -580,33 +546,13 @@ function SavedEntryRow({
 
   const handleEsc = () => setDraft(initialRef.current);
 
-  const handleDateBlur = async () => {
-    if (pendingDate === entry.date) return;
-    const taken = usedDates.has(pendingDate) && pendingDate !== entry.date;
-    if (!isValidDate(pendingDate) || taken) {
-      setPendingDate(entry.date);
-      return;
-    }
-    setStatus('saving');
-    try {
-      await onSaveEntry(pendingDate, buildPayload(draft));
-      await onDeleteEntry(entry.date);
-      setStatus('saved');
-    } catch {
-      setStatus('error');
-      setPendingDate(entry.date);
-    }
-  };
-
   const isToday = entry.date === today;
 
   return (
     <Row
       isToday={isToday}
       today={today}
-      pendingDate={pendingDate}
-      setPendingDate={setPendingDate}
-      onDateBlur={handleDateBlur}
+      date={entry.date}
       draft={draft}
       onChange={handleChange}
       onBlur={handleBlur}
@@ -635,9 +581,7 @@ function SavedEntryRow({
 function Row({
   isToday,
   today,
-  pendingDate,
-  setPendingDate,
-  onDateBlur,
+  date,
   draft,
   onChange,
   onBlur,
@@ -651,9 +595,7 @@ function Row({
 }: {
   isToday: boolean;
   today: string;
-  pendingDate: string;
-  setPendingDate: (v: string) => void;
-  onDateBlur: () => void;
+  date: string;
   draft: RowDraft;
   onChange: (field: EditableField, raw: string) => void;
   onBlur: () => void;
@@ -683,14 +625,7 @@ function Row({
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
       <TableCell className="text-mono text-text">
-        <DateInput
-          value={pendingDate}
-          today={today}
-          editable={!isToday}
-          showDraftPill={showDraftPill}
-          onChange={setPendingDate}
-          onBlur={onDateBlur}
-        />
+        <DateCell date={date} today={today} showDraftPill={showDraftPill} />
       </TableCell>
 
       {EDITABLE_COLS.map((field, i) => (
@@ -766,39 +701,19 @@ function Row({
   );
 }
 
-function DateInput({
-  value,
+function DateCell({
+  date,
   today,
-  editable = true,
   showDraftPill = false,
-  onChange,
-  onBlur,
 }: {
-  value: string;
+  date: string;
   today: string;
-  editable?: boolean;
   showDraftPill?: boolean;
-  onChange: (v: string) => void;
-  onBlur: () => void;
 }) {
   return (
     <div className="inline-flex items-center gap-1.5">
-      {editable ? (
-        <Input
-          type="date"
-          value={value}
-          max={subtractDays(today, 1)}
-          min={subtractDays(today, 365)}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          className="h-8 w-36 px-2 text-mono"
-        />
-      ) : (
-        <span className="inline-flex h-8 items-center px-2 text-mono">
-          {formatDate(value)}
-        </span>
-      )}
-      {value === today && (
+      <span className="inline-flex h-8 items-center text-mono">{formatDate(date)}</span>
+      {date === today && (
         <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-caption text-primary">
           today
         </span>
@@ -840,6 +755,3 @@ function dirtyFieldsOnly(current: RowDraft, initial: RowDraft): Partial<RowDraft
   return out;
 }
 
-function isValidDate(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s);
-}
