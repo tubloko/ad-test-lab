@@ -6,6 +6,7 @@ import { FirebaseError } from 'firebase/app';
 import {
   signInWithGoogle as fbSignInWithGoogle,
   signInWithEmail as fbSignInWithEmail,
+  signUpWithEmail as fbSignUpWithEmail,
 } from '@/lib/firebase/auth';
 
 interface UseLoginResult {
@@ -13,6 +14,7 @@ interface UseLoginResult {
   error: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
 }
 
 export function useLogin(redirectTo: string = '/'): UseLoginResult {
@@ -41,6 +43,8 @@ export function useLogin(redirectTo: string = '/'): UseLoginResult {
     signInWithGoogle: () => run(fbSignInWithGoogle),
     signInWithEmail: (email, password) =>
       run(() => fbSignInWithEmail(email, password)),
+    signUpWithEmail: (email, password) =>
+      run(() => fbSignUpWithEmail(email, password)),
   };
 }
 
@@ -52,12 +56,16 @@ function errorMessage(code: string): string {
       return 'Invalid email or password.';
     case 'auth/invalid-email':
       return 'Please enter a valid email address.';
+    case 'auth/email-already-in-use':
+      return 'An account with that email already exists. Try signing in instead.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Try again later.';
     case 'auth/popup-closed-by-user':
     case 'auth/cancelled-popup-request':
       return '';
     default:
-      return 'Sign-in failed. Please try again.';
+      return 'Authentication failed. Please try again.';
   }
 }

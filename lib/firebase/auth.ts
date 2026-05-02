@@ -2,6 +2,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
   type UserCredential,
 } from 'firebase/auth';
@@ -17,6 +18,13 @@ export async function signInWithEmail(
   password: string
 ): Promise<UserCredential> {
   return signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function signUpWithEmail(
+  email: string,
+  password: string
+): Promise<UserCredential> {
+  return createUserWithEmailAndPassword(auth, email, password);
 }
 
 export async function signOutUser(): Promise<void> {

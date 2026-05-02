@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,26 +10,34 @@ import { Label } from '@/components/ui/label';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
 import { useLogin } from '@/hooks/useLogin';
 
-const LoginFormSchema = z.object({
+const CredentialsSchema = z.object({
   email: z.string().email('Enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-type LoginFormValues = z.infer<typeof LoginFormSchema>;
+type CredentialsValues = z.infer<typeof CredentialsSchema>;
+type Mode = 'signin' | 'signup';
 
 export default function LoginPage() {
-  const { loading, error, signInWithGoogle, signInWithEmail } = useLogin();
+  const [mode, setMode] = useState<Mode>('signin');
+  const { loading, error, signInWithGoogle, signInWithEmail, signUpWithEmail } =
+    useLogin();
+
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(LoginFormSchema),
+  } = useForm<CredentialsValues>({
+    resolver: zodResolver(CredentialsSchema),
     defaultValues: { email: '', password: '' },
   });
 
-  const onSubmit = ({ email, password }: LoginFormValues) =>
-    signInWithEmail(email, password);
+  const onSubmit = ({ email, password }: CredentialsValues) =>
+    mode === 'signin'
+      ? signInWithEmail(email, password)
+      : signUpWithEmail(email, password);
+
+  const isSignUp = mode === 'signup';
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-bg p-6">
@@ -36,7 +45,7 @@ export default function LoginPage() {
         <div className="space-y-1 text-center">
           <h1 className="text-h2 font-semibold text-text">AdTestLab</h1>
           <p className="text-caption text-text-muted">
-            Sign in to manage your ad tests
+            {isSignUp ? 'Create an account to get started' : 'Sign in to manage your ad tests'}
           </p>
         </div>
 
@@ -77,7 +86,7 @@ export default function LoginPage() {
             <Input
               id="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete={isSignUp ? 'new-password' : 'current-password'}
               aria-invalid={Boolean(errors.password)}
               {...register('password')}
             />
@@ -89,7 +98,13 @@ export default function LoginPage() {
           </div>
 
           <Button type="submit" size="lg" className="w-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading
+              ? isSignUp
+                ? 'Creating account…'
+                : 'Signing in…'
+              : isSignUp
+                ? 'Create account'
+                : 'Sign in'}
           </Button>
         </form>
 
@@ -98,6 +113,17 @@ export default function LoginPage() {
             {error}
           </p>
         )}
+
+        <p className="text-center text-caption text-text-muted">
+          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+          <button
+            type="button"
+            onClick={() => setMode(isSignUp ? 'signin' : 'signup')}
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {isSignUp ? 'Sign in' : 'Sign up'}
+          </button>
+        </p>
       </div>
     </main>
   );
