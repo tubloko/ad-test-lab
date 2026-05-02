@@ -119,7 +119,7 @@ export function CampaignEntriesTable({
   const [backfillOpen, setBackfillOpen] = useState(false);
   const [pendingFocusDate, setPendingFocusDate] = useState<string | null>(null);
 
-  const handleBackfillDays = (n: number) => {
+  const handleBackfill = (dates: string[]) => {
     const existing = new Set([
       ...entries.map((e) => e.date),
       ...extras.map((r) => r.date),
@@ -127,8 +127,7 @@ export function CampaignEntriesTable({
     const newRows: ExtraRow[] = [];
     let skipped = 0;
     let oldestNew: string | null = null;
-    for (let i = 1; i <= n; i++) {
-      const d = subtractDays(today, i);
+    for (const d of dates) {
       if (existing.has(d)) {
         skipped++;
         continue;
@@ -136,36 +135,20 @@ export function CampaignEntriesTable({
       newRows.push({ tempId: crypto.randomUUID(), date: d });
       if (!oldestNew || d < oldestNew) oldestNew = d;
     }
+    setBackfillOpen(false);
     if (newRows.length === 0) {
       toast.info('All those dates already have rows.');
-      setBackfillOpen(false);
+      // Still focus the oldest existing one so the user can find it.
+      setPendingFocusDate(dates[0] ?? null);
       return;
     }
     setExtras((prev) => [...prev, ...newRows]);
-    setBackfillOpen(false);
     if (oldestNew) setPendingFocusDate(oldestNew);
     if (skipped > 0) {
       toast.success(`Added ${newRows.length} rows. ${skipped} dates already existed.`);
     } else {
       toast.success(`Added ${newRows.length} rows.`);
     }
-  };
-
-  const handleBackfillSpecific = (date: string) => {
-    const existing = new Set([
-      ...entries.map((e) => e.date),
-      ...extras.map((r) => r.date),
-    ]);
-    if (existing.has(date)) {
-      toast.info(`Row already exists for ${formatDate(date)}.`);
-      setPendingFocusDate(date);
-      setBackfillOpen(false);
-      return;
-    }
-    setExtras((prev) => [...prev, { tempId: crypto.randomUUID(), date }]);
-    setBackfillOpen(false);
-    setPendingFocusDate(date);
-    toast.success(`Added row for ${formatDate(date)}.`);
   };
 
   // Old → new (ascending). Today's row ends up at the bottom.
@@ -397,8 +380,7 @@ export function CampaignEntriesTable({
         open={backfillOpen}
         onOpenChange={setBackfillOpen}
         today={today}
-        onBackfillDays={handleBackfillDays}
-        onBackfillSpecific={handleBackfillSpecific}
+        onBackfill={handleBackfill}
       />
     </div>
   );

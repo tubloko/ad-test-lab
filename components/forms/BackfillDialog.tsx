@@ -13,40 +13,52 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDate } from '@/lib/utils/formatDate';
-import { subtractDays } from '@/lib/utils/date';
+import { subtractDays, dateRangeInclusive } from '@/lib/utils/date';
 import { cn } from '@/lib/utils';
 
 interface BackfillDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   today: string; // YYYY-MM-DD
-  onBackfillDays: (n: number) => void;
-  onBackfillSpecific: (date: string) => void;
+  /**
+   * Called with the chosen dates (oldest first). The caller handles
+   * filtering existing rows + showing toasts.
+   */
+  onBackfill: (dates: string[]) => void;
 }
 
 const QUICK_PICKS = [3, 7, 14, 30] as const;
+const MAX_DAYS = 90;
 
 export function BackfillDialog({
   open,
   onOpenChange,
   today,
-  onBackfillDays,
-  onBackfillSpecific,
+  onBackfill,
 }: BackfillDialogProps) {
   const [days, setDays] = useState<number>(7);
   const [specificDate, setSpecificDate] = useState<string>('');
 
   const minSpecific = subtractDays(today, 365);
-  const maxSpecific = subtractDays(today, 1); // yesterday
+  const yesterday = subtractDays(today, 1);
+
+  const clampedDays = Math.max(1, Math.min(MAX_DAYS, Math.floor(days || 0)));
+  const specificDateValid = isValidDateInRange(specificDate, minSpecific, yesterday);
+  const specificDates = specificDateValid
+    ? dateRangeInclusive(specificDate, yesterday)
+    : [];
 
   const handleConfirmDays = () => {
     if (!Number.isFinite(days) || days < 1) return;
-    onBackfillDays(Math.min(90, Math.floor(days)));
+    // today-1 .. today-N → list oldest-first
+    const dates: string[] = [];
+    for (let i = clampedDays; i >= 1; i--) dates.push(subtractDays(today, i));
+    onBackfill(dates);
   };
 
   const handleConfirmSpecific = () => {
-    if (!isValidDateInRange(specificDate, minSpecific, maxSpecific)) return;
-    onBackfillSpecific(specificDate);
+    if (!specificDateValid) return;
+    onBackfill(specificDates);
   };
 
   return (
@@ -89,12 +101,12 @@ export function BackfillDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="backfillCustom">Custom (1–90)</Label>
+              <Label htmlFor="backfillCustom">Custom (1–{MAX_DAYS})</Label>
               <Input
                 id="backfillCustom"
                 type="number"
                 min={1}
-                max={90}
+                max={MAX_DAYS}
                 step={1}
                 value={Number.isFinite(days) ? days : ''}
                 onChange={(e) => {
@@ -106,35 +118,38 @@ export function BackfillDialog({
             </div>
 
             <Button type="button" onClick={handleConfirmDays} disabled={days < 1}>
-              Add {Math.max(1, Math.min(90, Math.floor(days)))} rows
+              Add {clampedDays} {clampedDays === 1 ? 'row' : 'rows'}
             </Button>
           </TabsContent>
 
           <TabsContent value="specific" className="space-y-4 pt-4">
             <div className="space-y-1.5">
-              <Label htmlFor="backfillSpecific">Pick a date</Label>
+              <Label htmlFor="backfillSpecific">Start date</Label>
               <Input
                 id="backfillSpecific"
                 type="date"
                 min={minSpecific}
-                max={maxSpecific}
+                max={yesterday}
                 value={specificDate}
                 onChange={(e) => setSpecificDate(e.target.value)}
                 className="w-44"
               />
               <p className="text-caption text-text-muted">
-                Up to 365 days back, must be before today.
+                Adds a row for every date from your start date through yesterday.
+                Up to 365 days back.
               </p>
             </div>
 
             <Button
               type="button"
               onClick={handleConfirmSpecific}
-              disabled={!isValidDateInRange(specificDate, minSpecific, maxSpecific)}
+              disabled={!specificDateValid}
             >
-              {specificDate
-                ? `Add row for ${formatDate(specificDate)}`
-                : 'Add row'}
+              {specificDateValid
+                ? `Add ${specificDates.length} ${
+                    specificDates.length === 1 ? 'row' : 'rows'
+                  } from ${formatDate(specificDate)}`
+                : 'Pick a start date'}
             </Button>
           </TabsContent>
         </Tabs>

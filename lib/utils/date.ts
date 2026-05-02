@@ -24,3 +24,15 @@ export function subtractDays(yyyymmdd: string, n: number): string {
   dt.setUTCDate(dt.getUTCDate() - n);
   return dt.toISOString().slice(0, 10);
 }
+
+/** Inclusive range of "YYYY-MM-DD" strings from `start` to `end`. */
+export function dateRangeInclusive(start: string, end: string): string[] {
+  if (start > end) return [];
+  const out: string[] = [];
+  let cur = start;
+  while (cur <= end) {
+    out.push(cur);
+    cur = subtractDays(cur, -1);
+  }
+  return out;
+}
