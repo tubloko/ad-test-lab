@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Check, AlertTriangle, Trash2, Plus, Sigma } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  Loader2,
+  Check,
+  AlertTriangle,
+  Trash2,
+  Sigma,
+  CalendarPlus,
+} from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -15,10 +23,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { DateRangeSelect } from '@/components/DateRangeSelect';
+import { BackfillDialog } from '@/components/forms/BackfillDialog';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
 import { cpa, roas, profit } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
-import { todayInTimezone, dayBefore } from '@/lib/utils/date';
+import { formatDate } from '@/lib/utils/formatDate';
+import { todayInTimezone, subtractDays } from '@/lib/utils/date';
 import {
   cpaTone,
   roasTone,
@@ -106,13 +116,56 @@ export function CampaignEntriesTable({
     });
   }, [entries, today]);
 
-  const handleAddRow = () => {
-    const allDates = [...filtered.map((e) => e.date), ...extras.map((r) => r.date)];
-    const oldest = allDates.length > 0 ? allDates.reduce((a, b) => (a < b ? a : b)) : today;
-    setExtras((prev) => [
-      ...prev,
-      { tempId: crypto.randomUUID(), date: dayBefore(oldest) },
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [pendingFocusDate, setPendingFocusDate] = useState<string | null>(null);
+
+  const handleBackfillDays = (n: number) => {
+    const existing = new Set([
+      ...entries.map((e) => e.date),
+      ...extras.map((r) => r.date),
     ]);
+    const newRows: ExtraRow[] = [];
+    let skipped = 0;
+    let oldestNew: string | null = null;
+    for (let i = 1; i <= n; i++) {
+      const d = subtractDays(today, i);
+      if (existing.has(d)) {
+        skipped++;
+        continue;
+      }
+      newRows.push({ tempId: crypto.randomUUID(), date: d });
+      if (!oldestNew || d < oldestNew) oldestNew = d;
+    }
+    if (newRows.length === 0) {
+      toast.info('All those dates already have rows.');
+      setBackfillOpen(false);
+      return;
+    }
+    setExtras((prev) => [...prev, ...newRows]);
+    setBackfillOpen(false);
+    if (oldestNew) setPendingFocusDate(oldestNew);
+    if (skipped > 0) {
+      toast.success(`Added ${newRows.length} rows. ${skipped} dates already existed.`);
+    } else {
+      toast.success(`Added ${newRows.length} rows.`);
+    }
+  };
+
+  const handleBackfillSpecific = (date: string) => {
+    const existing = new Set([
+      ...entries.map((e) => e.date),
+      ...extras.map((r) => r.date),
+    ]);
+    if (existing.has(date)) {
+      toast.info(`Row already exists for ${formatDate(date)}.`);
+      setPendingFocusDate(date);
+      setBackfillOpen(false);
+      return;
+    }
+    setExtras((prev) => [...prev, { tempId: crypto.randomUUID(), date }]);
+    setBackfillOpen(false);
+    setPendingFocusDate(date);
+    toast.success(`Added row for ${formatDate(date)}.`);
   };
 
   // Old → new (ascending). Today's row ends up at the bottom.
@@ -180,13 +233,45 @@ export function CampaignEntriesTable({
     );
   };
 
+  // After we add a backfilled row, focus its spend cell. Run once the
+  // newly-added extra appears in sortedExtras (which it always will, since
+  // we just pushed it into state).
+  useEffect(() => {
+    if (!pendingFocusDate) return;
+    const eIdx = sortedExtras.findIndex((r) => r.date === pendingFocusDate);
+    if (eIdx >= 0) {
+      grid.focusCell(eIdx, 0);
+      setPendingFocusDate(null);
+      return;
+    }
+    const sIdx = sortedEntries.findIndex((e) => e.date === pendingFocusDate);
+    if (sIdx >= 0) {
+      grid.focusCell(sIdx + sortedExtras.length, 0);
+      setPendingFocusDate(null);
+    }
+  }, [pendingFocusDate, sortedExtras, sortedEntries, grid]);
+
+  const hasHistorical =
+    entries.some((e) => e.date !== today) || extras.some((r) => r.date !== today);
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-caption text-text-muted">
           {filtered.length} {filtered.length === 1 ? 'day' : 'days'} in view
         </p>
-        <DateRangeSelect preset={preset} onPresetChange={setPreset} />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setBackfillOpen(true)}
+          >
+            <CalendarPlus className="size-4" />
+            Backfill past days
+          </Button>
+          <DateRangeSelect preset={preset} onPresetChange={setPreset} />
+        </div>
       </div>
 
       <div className="rounded-lg border border-border bg-surface">
@@ -237,20 +322,6 @@ export function CampaignEntriesTable({
                 onDeleteRequest={() => setPendingDelete(entry.date)}
               />
             ))}
-            <TableRow>
-              <TableCell colSpan={10} className="py-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleAddRow}
-                  className="text-text-muted hover:text-text"
-                >
-                  <Plus className="size-4" />
-                  Add row
-                </Button>
-              </TableCell>
-            </TableRow>
           </TableBody>
           {filtered.length > 0 && (
             <TableFooter>
@@ -297,6 +368,20 @@ export function CampaignEntriesTable({
         </Table>
       </div>
 
+      {!hasHistorical && (
+        <p className="text-caption text-text-muted">
+          Have historical data? Use{' '}
+          <button
+            type="button"
+            className="underline-offset-2 hover:underline"
+            onClick={() => setBackfillOpen(true)}
+          >
+            Backfill past days
+          </button>{' '}
+          to get a verdict faster.
+        </p>
+      )}
+
       <ConfirmDialog
         open={pendingDelete !== null}
         onOpenChange={(o) => !o && setPendingDelete(null)}
@@ -306,6 +391,14 @@ export function CampaignEntriesTable({
           if (pendingDelete) await onDeleteEntry(pendingDelete);
           setPendingDelete(null);
         }}
+      />
+
+      <BackfillDialog
+        open={backfillOpen}
+        onOpenChange={setBackfillOpen}
+        today={today}
+        onBackfillDays={handleBackfillDays}
+        onBackfillSpecific={handleBackfillSpecific}
       />
     </div>
   );
@@ -412,6 +505,11 @@ function ExtraRowComponent({
   const profitValue = profit(revenue, spend, cogs);
 
   const isToday = date === today;
+  const isUntouched =
+    draft.spend === '' &&
+    draft.revenue === '' &&
+    draft.orders === '' &&
+    draft.cogs === '';
 
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
@@ -419,6 +517,8 @@ function ExtraRowComponent({
         <DateInput
           value={pendingDate}
           today={today}
+          editable={!isToday}
+          showDraftPill={!isToday && isUntouched}
           onChange={setPendingDate}
           onBlur={handleDateBlur}
         />
@@ -613,6 +713,7 @@ function SavedEntryRow({
         <DateInput
           value={pendingDate}
           today={today}
+          editable={!isToday}
           onChange={setPendingDate}
           onBlur={handleDateBlur}
         />
@@ -665,15 +766,17 @@ function SavedEntryRow({
       </TableCell>
 
       <TableCell className="w-10 text-right">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={`Delete entry for ${entry.date}`}
-          onClick={onDeleteRequest}
-        >
-          <Trash2 className="size-4" />
-        </Button>
+        {!isToday && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Delete entry for ${entry.date}`}
+            onClick={onDeleteRequest}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -682,27 +785,46 @@ function SavedEntryRow({
 function DateInput({
   value,
   today,
+  editable = true,
+  showDraftPill = false,
   onChange,
   onBlur,
 }: {
   value: string;
   today: string;
+  editable?: boolean;
+  showDraftPill?: boolean;
   onChange: (v: string) => void;
   onBlur: () => void;
 }) {
   return (
     <div className="inline-flex items-center gap-1.5">
-      <Input
-        type="date"
-        value={value}
-        max={today}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        className="h-8 w-36 px-2 text-mono"
-      />
+      {editable ? (
+        <Input
+          type="date"
+          value={value}
+          max={subtractDays(today, 1)}
+          min={subtractDays(today, 365)}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          className="h-8 w-36 px-2 text-mono"
+        />
+      ) : (
+        <span className="inline-flex h-8 items-center px-2 text-mono">
+          {formatDate(value)}
+        </span>
+      )}
       {value === today && (
         <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-caption text-primary">
           today
+        </span>
+      )}
+      {showDraftPill && (
+        <span
+          title="Not saved yet — type any value to persist"
+          className="rounded-full border border-border-subtle bg-elevated px-1.5 py-0.5 text-caption text-text-muted"
+        >
+          Draft
         </span>
       )}
     </div>

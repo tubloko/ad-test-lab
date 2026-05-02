@@ -14,8 +14,13 @@ export function getBrowserTimezone(): string {
 
 /** Subtract one day from a "YYYY-MM-DD" string. */
 export function dayBefore(yyyymmdd: string): string {
+  return subtractDays(yyyymmdd, 1);
+}
+
+/** Subtract N days from a "YYYY-MM-DD" string (UTC-stable). */
+export function subtractDays(yyyymmdd: string, n: number): string {
   const [y, m, d] = yyyymmdd.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() - 1);
+  dt.setUTCDate(dt.getUTCDate() - n);
   return dt.toISOString().slice(0, 10);
 }

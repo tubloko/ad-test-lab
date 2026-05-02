@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
 const inter = Inter({
@@ -21,7 +22,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="bg-bg text-text antialiased">{children}</body>
+      <body className="bg-bg text-text antialiased">
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }
