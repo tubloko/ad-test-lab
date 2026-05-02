@@ -23,6 +23,10 @@ export interface EnrichedCampaignEntry extends CampaignEntry {
 
 interface CampaignEntriesResult {
   data: EnrichedCampaignEntry[];
+  /** Sum of adset spend for every date with adset data, regardless of
+   *  whether a campaign entry exists for that date. The table uses this
+   *  for the auto-fill spend on rows that don't yet have a saved entry. */
+  adsetSpendByDate: Map<string, number>;
   loading: boolean;
   error: FirestoreError | undefined;
 }
@@ -74,8 +78,13 @@ export function useCampaignEntries(
   }, [user, productId, campaignId, snap, adsetSumByDate]);
 
   if (!user || !productId || !campaignId) {
-    return { data: [], loading: false, error: undefined };
+    return { data: [], adsetSpendByDate: new Map(), loading: false, error: undefined };
   }
 
-  return { data, loading: loadingEntries || loadingAdsets, error };
+  return {
+    data,
+    adsetSpendByDate: adsetSumByDate,
+    loading: loadingEntries || loadingAdsets,
+    error,
+  };
 }

@@ -164,6 +164,17 @@
     -moz-appearance: textfield;
     appearance: textfield;
   }
+
+  /* The native date-picker icon ships black, which disappears on the dark
+     theme. Invert it in dark; leave it alone on light. */
+  .dark input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(0.85);
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .dark input[type='date']::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
 }
 
 @layer components {

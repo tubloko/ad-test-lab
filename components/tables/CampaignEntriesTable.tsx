@@ -45,8 +45,10 @@ import type { CampaignEntryInput } from '@/types/entry';
 
 interface CampaignEntriesTableProps {
   entries: EnrichedCampaignEntry[];
+  /** Sum of adset spend per date — needed for the auto-fill on rows that
+   *  don't have a saved campaign entry yet. */
+  adsetSpendByDate: Map<string, number>;
   targetCPA: number;
-  defaultCOGS?: number;
   timezone: string;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
   onClearOverride: (date: string) => Promise<void>;
@@ -64,26 +66,23 @@ interface RowDraft {
   spendOverride: boolean;
 }
 
-function toDraft(entry: EnrichedCampaignEntry, defaultCOGS?: number): RowDraft {
-  const cogs = entry.cogs > 0 ? entry.cogs : defaultCOGS ?? 0;
+function toDraft(entry: EnrichedCampaignEntry): RowDraft {
   return {
     spend: entry.spendOverride ? String(entry.spend) : String(entry.displayedSpend),
     revenue: entry.revenue ? String(entry.revenue) : '',
     orders: entry.orders ? String(entry.orders) : '',
-    cogs: cogs ? String(cogs) : '',
+    cogs: entry.cogs ? String(entry.cogs) : '',
     spendOverride: entry.spendOverride,
   };
 }
 
-function emptyDraft(defaultCOGS?: number): RowDraft {
-  return {
-    spend: '',
-    revenue: '',
-    orders: '',
-    cogs: defaultCOGS ? String(defaultCOGS) : '',
-    spendOverride: false,
-  };
-}
+const EMPTY_DRAFT: RowDraft = {
+  spend: '',
+  revenue: '',
+  orders: '',
+  cogs: '',
+  spendOverride: false,
+};
 
 interface ExtraRow {
   tempId: string;
@@ -92,8 +91,8 @@ interface ExtraRow {
 
 export function CampaignEntriesTable({
   entries,
+  adsetSpendByDate,
   targetCPA,
-  defaultCOGS,
   timezone,
   onSaveEntry,
   onClearOverride,
@@ -151,23 +150,36 @@ export function CampaignEntriesTable({
     colCount: EDITABLE_COLS.length,
   });
 
+  // Totals include dates that only have adset spend (no campaign entry yet)
+  // — mirrors the verdict aggregator so the table footer agrees with the
+  // sticky verdict bar.
   const totals = useMemo(() => {
-    const acc = filtered.reduce(
-      (a, e) => ({
-        spend: a.spend + e.effectiveSpend,
-        revenue: a.revenue + e.revenue,
-        orders: a.orders + e.orders,
-        cogs: a.cogs + e.cogs,
-      }),
-      { spend: 0, revenue: 0, orders: 0, cogs: 0 },
-    );
+    const campaignByDate = new Map(filtered.map((e) => [e.date, e]));
+    const allDates = new Set<string>(campaignByDate.keys());
+    for (const date of adsetSpendByDate.keys()) {
+      if (isWithinRange(date, fromDate, today)) allDates.add(date);
+    }
+    let spend = 0;
+    let revenue = 0;
+    let orders = 0;
+    let cogsTotal = 0;
+    for (const date of allDates) {
+      const ce = campaignByDate.get(date);
+      spend += ce?.spendOverride ? ce.spend : adsetSpendByDate.get(date) ?? 0;
+      revenue += ce?.revenue ?? 0;
+      orders += ce?.orders ?? 0;
+      cogsTotal += ce?.cogs ?? 0;
+    }
     return {
-      ...acc,
-      cpa: cpa(acc.spend, acc.orders),
-      roas: roas(acc.revenue, acc.spend),
-      profit: profit(acc.revenue, acc.spend, acc.cogs),
+      spend,
+      revenue,
+      orders,
+      cogs: cogsTotal,
+      cpa: cpa(spend, orders),
+      roas: roas(revenue, spend),
+      profit: profit(revenue, spend, cogsTotal),
     };
-  }, [filtered]);
+  }, [filtered, adsetSpendByDate, fromDate, today]);
 
   const usedDates = useMemo(() => {
     const s = new Set<string>();
@@ -214,7 +226,7 @@ export function CampaignEntriesTable({
                 row={idx}
                 today={today}
                 date={extra.date}
-                defaultCOGS={defaultCOGS}
+                adsetSpendSum={adsetSpendByDate.get(extra.date) ?? 0}
                 targetCPA={targetCPA}
                 grid={grid}
                 usedDates={usedDates}
@@ -231,7 +243,6 @@ export function CampaignEntriesTable({
                 row={idx + sortedExtras.length}
                 today={today}
                 entry={entry}
-                defaultCOGS={defaultCOGS}
                 targetCPA={targetCPA}
                 grid={grid}
                 usedDates={usedDates}
@@ -324,7 +335,7 @@ interface ExtraRowProps {
   row: number;
   today: string;
   date: string;
-  defaultCOGS?: number;
+  adsetSpendSum: number;
   targetCPA: number;
   grid: ReturnType<typeof useGridNavigation>;
   usedDates: Set<string>;
@@ -337,7 +348,7 @@ function ExtraRowComponent({
   row,
   today,
   date,
-  defaultCOGS,
+  adsetSpendSum,
   targetCPA,
   grid,
   usedDates,
@@ -345,7 +356,7 @@ function ExtraRowComponent({
   onDateChange,
   onRemoveExtra,
 }: ExtraRowProps) {
-  const [draft, setDraft] = useState<RowDraft>(() => emptyDraft(defaultCOGS));
+  const [draft, setDraft] = useState<RowDraft>(EMPTY_DRAFT);
   const initialRef = useRef<RowDraft>(draft);
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -362,15 +373,19 @@ function ExtraRowComponent({
     [],
   );
 
-  const flushSave = async (next: RowDraft, override: boolean) => {
+  const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
+      // When override is on, write the user's spend. When off, write the
+      // current auto-fill value as a cache (the display layer recomputes
+      // from adsets on read regardless).
+      const spend = next.spendOverride ? parseNum(next.spend) : adsetSpendSum;
       await onSaveEntry(date, {
-        spend: parseNum(next.spend),
+        spend,
         revenue: parseNum(next.revenue),
         orders: Math.round(parseNum(next.orders)),
         cogs: parseNum(next.cogs),
-        spendOverride: override ? true : undefined,
+        spendOverride: next.spendOverride,
       });
       setStatus('saved');
       if (fadeTimer.current) clearTimeout(fadeTimer.current);
@@ -380,25 +395,29 @@ function ExtraRowComponent({
     }
   };
 
-  const scheduleSave = (next: RowDraft, override: boolean) => {
+  const scheduleSave = (next: RowDraft) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void flushSave(next, override), 300);
+    saveTimer.current = setTimeout(() => void flushSave(next), 300);
   };
 
   const handleChange = (field: EditableField, raw: string) => {
     const next = { ...draft, [field]: raw };
     if (field === 'spend') next.spendOverride = true;
     setDraft(next);
-    scheduleSave(next, field === 'spend');
+    scheduleSave(next);
   };
 
   const handleBlur = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    void flushSave(draft, draft.spendOverride);
+    void flushSave(draft);
   };
 
-  const handleEsc = () => {
-    setDraft(initialRef.current);
+  const handleEsc = () => setDraft(initialRef.current);
+
+  const handleResetSpend = () => {
+    const next = { ...draft, spend: '', spendOverride: false };
+    setDraft(next);
+    scheduleSave(next);
   };
 
   const handleDateBlur = () => {
@@ -413,12 +432,13 @@ function ExtraRowComponent({
   const orders = parseNum(draft.orders);
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
-  const spend = parseNum(draft.spend);
-  const cpaValue = cpa(spend, orders);
-  const roasValue = roas(revenue, spend);
-  const profitValue = profit(revenue, spend, cogs);
+  const effectiveSpend = draft.spendOverride ? parseNum(draft.spend) : adsetSpendSum;
+  const cpaValue = cpa(effectiveSpend, orders);
+  const roasValue = roas(revenue, effectiveSpend);
+  const profitValue = profit(revenue, effectiveSpend, cogs);
 
   const isToday = date === today;
+  const spendDisplay = draft.spendOverride ? draft.spend : (adsetSpendSum ? String(adsetSpendSum) : '');
 
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
@@ -432,23 +452,33 @@ function ExtraRowComponent({
       </TableCell>
 
       <TableCell className="text-right">
-        <Input
-          ref={grid.getRef(row, 0)}
-          type="number"
-          inputMode="decimal"
-          step="0.01"
-          min={0}
-          value={draft.spend}
-          placeholder="0"
-          onChange={(e) => handleChange('spend', e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') handleEsc();
-            grid.onKeyDown(row, 0)(e);
-          }}
-          aria-label={`Spend on ${date}`}
-          className="h-8 w-24 px-2 text-right text-mono"
-        />
+        <div className="inline-flex items-center justify-end gap-1.5">
+          <SpendBadge
+            override={draft.spendOverride}
+            adsetSum={adsetSpendSum}
+            onReset={handleResetSpend}
+          />
+          <Input
+            ref={grid.getRef(row, 0)}
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min={0}
+            value={spendDisplay}
+            placeholder="0"
+            onChange={(e) => handleChange('spend', e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') handleEsc();
+              grid.onKeyDown(row, 0)(e);
+            }}
+            aria-label={`Spend on ${date}`}
+            className={cn(
+              'h-8 w-24 px-2 text-right text-mono',
+              !draft.spendOverride && 'text-text-muted',
+            )}
+          />
+        </div>
       </TableCell>
 
       {(['revenue', 'orders', 'cogs'] as const).map((field, i) => (
@@ -484,10 +514,10 @@ function ExtraRowComponent({
       <TableCell
         className={cn(
           'text-right text-mono',
-          spend > 0 ? TONE_TEXT_CLASS[roasTone(roasValue)] : 'text-text-muted',
+          effectiveSpend > 0 ? TONE_TEXT_CLASS[roasTone(roasValue)] : 'text-text-muted',
         )}
       >
-        {spend > 0 ? roasValue.toFixed(2) : '—'}
+        {effectiveSpend > 0 ? roasValue.toFixed(2) : '—'}
       </TableCell>
       <TableCell
         className={cn('text-right text-mono', TONE_TEXT_CLASS[profitTone(profitValue)])}
@@ -521,7 +551,6 @@ interface SavedEntryRowProps {
   row: number;
   today: string;
   entry: EnrichedCampaignEntry;
-  defaultCOGS?: number;
   targetCPA: number;
   grid: ReturnType<typeof useGridNavigation>;
   usedDates: Set<string>;
@@ -535,7 +564,6 @@ function SavedEntryRow({
   row,
   today,
   entry,
-  defaultCOGS,
   targetCPA,
   grid,
   usedDates,
@@ -544,7 +572,7 @@ function SavedEntryRow({
   onDeleteEntry,
   onDeleteRequest,
 }: SavedEntryRowProps) {
-  const [draft, setDraft] = useState<RowDraft>(() => toDraft(entry, defaultCOGS));
+  const [draft, setDraft] = useState<RowDraft>(() => toDraft(entry));
   const initialRef = useRef<RowDraft>(draft);
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -552,7 +580,7 @@ function SavedEntryRow({
   const [pendingDate, setPendingDate] = useState<string>(entry.date);
 
   useEffect(() => {
-    const next = toDraft(entry, defaultCOGS);
+    const next = toDraft(entry);
     initialRef.current = next;
     setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
     setPendingDate(entry.date);
@@ -575,15 +603,16 @@ function SavedEntryRow({
     [],
   );
 
-  const flushSave = async (next: RowDraft, override: boolean) => {
+  const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
+      const spend = next.spendOverride ? parseNum(next.spend) : entry.adsetSpendSum;
       await onSaveEntry(entry.date, {
-        spend: parseNum(next.spend),
+        spend,
         revenue: parseNum(next.revenue),
         orders: Math.round(parseNum(next.orders)),
         cogs: parseNum(next.cogs),
-        spendOverride: override ? true : undefined,
+        spendOverride: next.spendOverride,
       });
       setStatus('saved');
       if (fadeTimer.current) clearTimeout(fadeTimer.current);
@@ -593,21 +622,21 @@ function SavedEntryRow({
     }
   };
 
-  const scheduleSave = (next: RowDraft, override: boolean) => {
+  const scheduleSave = (next: RowDraft) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void flushSave(next, override), 300);
+    saveTimer.current = setTimeout(() => void flushSave(next), 300);
   };
 
   const handleChange = (field: EditableField, raw: string) => {
     const next = { ...draft, [field]: raw };
     if (field === 'spend') next.spendOverride = true;
     setDraft(next);
-    scheduleSave(next, field === 'spend');
+    scheduleSave(next);
   };
 
   const handleBlur = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    void flushSave(draft, draft.spendOverride);
+    void flushSave(draft);
   };
 
   const handleEsc = () => {
@@ -634,12 +663,13 @@ function SavedEntryRow({
     }
     setStatus('saving');
     try {
+      const spend = draft.spendOverride ? parseNum(draft.spend) : entry.adsetSpendSum;
       await onSaveEntry(pendingDate, {
-        spend: parseNum(draft.spend),
+        spend,
         revenue: parseNum(draft.revenue),
         orders: Math.round(parseNum(draft.orders)),
         cogs: parseNum(draft.cogs),
-        spendOverride: draft.spendOverride ? true : undefined,
+        spendOverride: draft.spendOverride,
       });
       await onDeleteEntry(entry.date);
       setStatus('saved');

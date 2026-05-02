@@ -3,6 +3,14 @@ import { db } from './config';
 import { paths } from './paths';
 import type { CampaignEntryInput, AdsetEntryInput } from '@/types/entry';
 
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(obj) as (keyof T)[]) {
+    if (obj[k] !== undefined) out[k] = obj[k];
+  }
+  return out;
+}
+
 async function upsertWithCreatedAt(
   refPath: string,
   payload: Record<string, unknown>,
@@ -12,7 +20,7 @@ async function upsertWithCreatedAt(
   await setDoc(
     ref,
     {
-      ...payload,
+      ...stripUndefined(payload),
       updatedAt: serverTimestamp(),
       ...(snap.exists() ? {} : { createdAt: serverTimestamp() }),
     },
@@ -21,10 +29,10 @@ async function upsertWithCreatedAt(
 }
 
 /**
- * Upsert a campaign daily entry. If the caller passes `spend`, treat it as
- * a manual edit and set spendOverride: true. Callers that are syncing the
- * auto-fill cache (writing the adset-summed spend) should pass an empty
- * data object or omit `spend` and call setSpendCache instead.
+ * Upsert a campaign daily entry. The caller is responsible for passing
+ * `spendOverride` explicitly: `true` when the user manually edited the
+ * spend column, `false` when the spend value is just the auto-fill
+ * cache. No magic on this side.
  */
 export async function upsertCampaignEntry(
   uid: string,
@@ -33,13 +41,9 @@ export async function upsertCampaignEntry(
   date: string,
   data: CampaignEntryInput,
 ): Promise<void> {
-  const payload: Record<string, unknown> = { ...data, date };
-  if (data.spend !== undefined && data.spendOverride === undefined) {
-    payload.spendOverride = true;
-  }
   await upsertWithCreatedAt(
     paths.campaignEntry(uid, productId, campaignId, date),
-    payload,
+    { ...data, date },
   );
 }
 
