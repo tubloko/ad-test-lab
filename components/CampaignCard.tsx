@@ -4,23 +4,25 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from './ConfirmDialog';
 import { StatusBadge } from './StatusBadge';
 import { VerdictBadge } from '@/components/verdict/VerdictBadge';
+import { EditCampaignDialog } from '@/components/forms/EditCampaignDialog';
 import { useCampaignEntries } from '@/hooks/useCampaignEntries';
 import { useAdsets } from '@/hooks/useAdsets';
 import { useAllAdsetEntries } from '@/hooks/useAllAdsetEntries';
 import { useVerdict } from '@/hooks/useVerdict';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { cpaTone, profitTone, TONE_TEXT_CLASS } from '@/lib/utils/threshold-color';
-import type { Campaign } from '@/types/campaign';
+import type { Campaign, CampaignInput } from '@/types/campaign';
 
 interface CampaignCardProps {
   productId: string;
   campaign: Campaign;
   targetCPA: number;
   onDelete: (id: string) => Promise<void> | void;
+  onEdit: (id: string, data: CampaignInput) => Promise<void>;
 }
 
 const ALL_TIME = { from: null as string | null, to: '2099-12-31' };
@@ -30,8 +32,10 @@ export function CampaignCard({
   campaign,
   targetCPA,
   onDelete,
+  onEdit,
 }: CampaignCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data: entries } = useCampaignEntries(productId, campaign.id);
   const { data: adsets } = useAdsets(productId, campaign.id);
@@ -89,13 +93,15 @@ export function CampaignCard({
       </Link>
 
       <div className="flex shrink-0 items-start gap-1">
-        <Link
-          href={`/products/${productId}/campaigns/${campaign.id}/edit`}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
           aria-label="Edit campaign"
-          className={buttonVariants({ variant: 'ghost', size: 'icon' })}
+          onClick={() => setEditOpen(true)}
         >
           <Pencil className="size-4" />
-        </Link>
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -113,6 +119,13 @@ export function CampaignCard({
         title={`Delete "${campaign.name}"?`}
         description="This will permanently delete the campaign, its adsets, and every daily entry under it."
         onConfirm={() => onDelete(campaign.id)}
+      />
+
+      <EditCampaignDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        campaign={campaign}
+        onSubmit={(data) => onEdit(campaign.id, data)}
       />
     </Card>
   );

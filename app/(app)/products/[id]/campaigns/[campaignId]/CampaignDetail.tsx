@@ -22,11 +22,13 @@ import { StickyVerdictBar } from '@/components/verdict/StickyVerdictBar';
 import { CampaignEntriesTable } from '@/components/tables/CampaignEntriesTable';
 import { AdsetAccordion } from '@/components/AdsetAccordion';
 import { NewAdsetDialog } from '@/components/forms/NewAdsetDialog';
+import { EditCampaignDialog } from '@/components/forms/EditCampaignDialog';
 import { SpendVsRevenueChart } from '@/components/charts/SpendVsRevenueChart';
 import { CPATrendChart } from '@/components/charts/CPATrendChart';
-import { deleteCampaign } from '@/lib/firebase/campaigns';
-import { createAdset, deleteAdset } from '@/lib/firebase/adsets';
+import { deleteCampaign, updateCampaign } from '@/lib/firebase/campaigns';
+import { createAdset, deleteAdset, updateAdset } from '@/lib/firebase/adsets';
 import type { AdsetInput } from '@/types/adset';
+import type { CampaignInput } from '@/types/campaign';
 import { rangeStartDate } from '@/lib/utils/dateRange';
 import { todayInTimezone, getBrowserTimezone } from '@/lib/utils/date';
 
@@ -68,6 +70,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [newAdsetOpen, setNewAdsetOpen] = useState(false);
+  const [editCampaignOpen, setEditCampaignOpen] = useState(false);
 
   if (loading) {
     return (
@@ -116,6 +119,16 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
     await createAdset(user.uid, productId, campaignId, data);
   };
 
+  const handleEditAdset = async (adsetId: string, data: AdsetInput) => {
+    if (!user) return;
+    await updateAdset(user.uid, productId, campaignId, adsetId, data);
+  };
+
+  const handleEditCampaign = async (data: CampaignInput) => {
+    if (!user) return;
+    await updateCampaign(user.uid, productId, campaignId, data);
+  };
+
   const hasAnyData = entries.length > 0 || adsetIds.some((id) => (byAdsetId[id]?.length ?? 0) > 0);
 
   return (
@@ -147,13 +160,15 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href={`/products/${productId}/campaigns/${campaignId}/edit`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setEditCampaignOpen(true)}
           >
             <Pencil className="size-4" />
             Edit
-          </Link>
+          </Button>
           <Button
             type="button"
             variant="destructive"
@@ -209,8 +224,10 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
           <AdsetAccordion
             productId={productId}
             campaignId={campaignId}
+            productName={product?.name ?? ''}
             adsets={adsets}
             onConfirmDelete={handleDeleteAdset}
+            onEdit={handleEditAdset}
           />
         )}
       </section>
@@ -238,6 +255,13 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         onOpenChange={setNewAdsetOpen}
         productName={product?.name ?? ''}
         onSubmit={handleCreateAdset}
+      />
+
+      <EditCampaignDialog
+        open={editCampaignOpen}
+        onOpenChange={setEditCampaignOpen}
+        campaign={campaign}
+        onSubmit={handleEditCampaign}
       />
     </section>
   );

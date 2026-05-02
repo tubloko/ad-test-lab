@@ -13,9 +13,15 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { CampaignCard } from '@/components/CampaignCard';
 import { ProductKPISummary } from '@/components/ProductKPISummary';
+import { NewCampaignDialog } from '@/components/forms/NewCampaignDialog';
 import { ProductHeader } from './ProductHeader';
 import { deleteProduct } from '@/lib/firebase/products';
-import { deleteCampaign } from '@/lib/firebase/campaigns';
+import {
+  createCampaign,
+  deleteCampaign,
+  updateCampaign,
+} from '@/lib/firebase/campaigns';
+import type { CampaignInput } from '@/types/campaign';
 
 interface ProductDetailProps {
   productId: string;
@@ -27,6 +33,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
   const { data: product, loading, error } = useProduct(productId);
   const { data: campaigns, loading: campaignsLoading } = useCampaigns(productId);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [newCampaignOpen, setNewCampaignOpen] = useState(false);
 
   if (loading) {
     return (
@@ -67,6 +74,16 @@ export function ProductDetail({ productId }: ProductDetailProps) {
     await deleteCampaign(user.uid, productId, campaignId);
   };
 
+  const handleCreateCampaign = async (data: CampaignInput) => {
+    if (!user) return;
+    await createCampaign(user.uid, productId, data);
+  };
+
+  const handleEditCampaign = async (campaignId: string, data: CampaignInput) => {
+    if (!user) return;
+    await updateCampaign(user.uid, productId, campaignId, data);
+  };
+
   return (
     <section className="mx-auto w-full max-w-6xl space-y-8">
       <ProductHeader product={product} onDeleteClick={() => setConfirmOpen(true)} />
@@ -80,13 +97,15 @@ export function ProductDetail({ productId }: ProductDetailProps) {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-heading text-text">Campaigns</h2>
-          <Link
-            href={`/products/${productId}/campaigns/new`}
-            className={buttonVariants({ variant: 'default', size: 'sm' })}
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => setNewCampaignOpen(true)}
           >
             <Plus className="size-4" />
             New campaign
-          </Link>
+          </Button>
         </div>
 
         {campaignsLoading ? (
@@ -97,13 +116,10 @@ export function ProductDetail({ productId }: ProductDetailProps) {
             title="No campaigns yet"
             description="Campaigns hold the daily entries and verdict for one ad test. Start one to begin tracking."
             action={
-              <Link
-                href={`/products/${productId}/campaigns/new`}
-                className={buttonVariants({ variant: 'default' })}
-              >
+              <Button type="button" onClick={() => setNewCampaignOpen(true)}>
                 <Plus className="size-4" />
                 Create your first campaign
-              </Link>
+              </Button>
             }
           />
         ) : (
@@ -115,6 +131,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
                 campaign={c}
                 targetCPA={product.targetCPA}
                 onDelete={handleDeleteCampaign}
+                onEdit={handleEditCampaign}
               />
             ))}
           </div>
@@ -127,6 +144,13 @@ export function ProductDetail({ productId }: ProductDetailProps) {
         title={`Delete "${product.name}"?`}
         description="This will permanently delete the product. All campaigns, adsets, and daily entries under it will also be deleted."
         onConfirm={handleDeleteProduct}
+      />
+
+      <NewCampaignDialog
+        open={newCampaignOpen}
+        onOpenChange={setNewCampaignOpen}
+        productName={product.name}
+        onSubmit={handleCreateCampaign}
       />
     </section>
   );

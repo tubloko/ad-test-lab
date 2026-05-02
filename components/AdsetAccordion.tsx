@@ -1,24 +1,26 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { ChevronDown, Pencil, Trash2 } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from './StatusBadge';
 import { AdsetEntriesTable } from '@/components/tables/AdsetEntriesTable';
+import { EditAdsetDialog } from '@/components/forms/EditAdsetDialog';
 import { useAdsetEntries } from '@/hooks/useAdsetEntries';
 import { useAdsetEntryMutations } from '@/hooks/useAdsetEntryMutations';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { getBrowserTimezone } from '@/lib/utils/date';
-import type { Adset } from '@/types/adset';
+import type { Adset, AdsetInput } from '@/types/adset';
 
 interface AdsetAccordionProps {
   productId: string;
   campaignId: string;
+  productName: string;
   adsets: Adset[];
   onConfirmDelete: (adsetId: string) => Promise<void> | void;
+  onEdit: (adsetId: string, data: AdsetInput) => Promise<void>;
 }
 
 const PARAM = 'adsets';
@@ -26,8 +28,10 @@ const PARAM = 'adsets';
 export function AdsetAccordion({
   productId,
   campaignId,
+  productName,
   adsets,
   onConfirmDelete,
+  onEdit,
 }: AdsetAccordionProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -58,10 +62,12 @@ export function AdsetAccordion({
           key={adset.id}
           productId={productId}
           campaignId={campaignId}
+          productName={productName}
           adset={adset}
           open={openSet.has(adset.id)}
           onOpenChange={(o) => setOpen(adset.id, o)}
           onDelete={onConfirmDelete}
+          onEdit={onEdit}
         />
       ))}
     </div>
@@ -76,18 +82,24 @@ function parseOpen(raw: string | null): Set<string> {
 function AdsetItem({
   productId,
   campaignId,
+  productName,
   adset,
   open,
   onOpenChange,
   onDelete,
+  onEdit,
 }: {
   productId: string;
   campaignId: string;
+  productName: string;
   adset: Adset;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: (adsetId: string) => Promise<void> | void;
+  onEdit: (adsetId: string, data: AdsetInput) => Promise<void>;
 }) {
+  const [editOpen, setEditOpen] = useState(false);
+
   return (
     <details
       open={open}
@@ -112,13 +124,15 @@ function AdsetItem({
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          <Link
-            href={`/products/${productId}/campaigns/${campaignId}/adsets/${adset.id}/edit`}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             aria-label="Edit adset"
-            className={buttonVariants({ variant: 'ghost', size: 'icon' })}
+            onClick={() => setEditOpen(true)}
           >
             <Pencil className="size-4" />
-          </Link>
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -140,6 +154,14 @@ function AdsetItem({
           />
         )}
       </div>
+
+      <EditAdsetDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        productName={productName}
+        adset={adset}
+        onSubmit={(data) => onEdit(adset.id, data)}
+      />
     </details>
   );
 }
