@@ -6,3 +6,13 @@ export { lpvRate } from './lpvRate';
 export { atcRate } from './atcRate';
 export { icRate } from './icRate';
 export { purchaseRate } from './purchaseRate';
+export {
+  aggregateProductEntries,
+  aggregateAdsetEntries,
+  mergeForVerdict,
+} from './aggregate';
+export type {
+  DateRange,
+  ProductAggregate,
+  AdsetAggregate,
+} from './aggregate';

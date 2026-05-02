@@ -2,21 +2,22 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { ArrowLeft, Pencil, Plus, Trash2, Layers } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useUser } from '@/hooks/useUser';
 import { useProduct } from '@/hooks/useProduct';
+import { useProductEntries } from '@/hooks/useProductEntries';
+import { useProductEntryMutations } from '@/hooks/useProductEntryMutations';
 import { useAdsets } from '@/hooks/useAdsets';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { useAllAdsetEntries } from '@/hooks/useAllAdsetEntries';
+import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { StatusBadge } from '@/components/StatusBadge';
-import { AdsetCard } from '@/components/AdsetCard';
-import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ProductHeader } from './ProductHeader';
+import { ProductOverview } from './ProductOverview';
+import { ProductTabs } from './ProductTabs';
 import { deleteProduct } from '@/lib/firebase/products';
 import { deleteAdset } from '@/lib/firebase/adsets';
-import { formatCurrency } from '@/lib/utils/formatCurrency';
+import { getBrowserTimezone } from '@/lib/utils/date';
 
 interface ProductDetailProps {
   productId: string;
@@ -26,12 +27,16 @@ export function ProductDetail({ productId }: ProductDetailProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: product, loading, error } = useProduct(productId);
+  const { data: entries } = useProductEntries(productId);
   const { data: adsets, loading: adsetsLoading } = useAdsets(productId);
+  const adsetIds = useMemo(() => adsets.map((a) => a.id), [adsets]);
+  const { byAdsetId } = useAllAdsetEntries(productId, adsetIds);
+  const { saveEntry, deleteEntry } = useProductEntryMutations(productId);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-4">
+      <div className="mx-auto w-full max-w-6xl space-y-4">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-40" />
       </div>
@@ -48,7 +53,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
 
   if (!product) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-3 text-center">
+      <div className="mx-auto w-full max-w-6xl space-y-3 text-center">
         <p className="text-subheading text-text">Product not found.</p>
         <Link href="/" className={buttonVariants({ variant: 'outline' })}>
           Back to products
@@ -69,105 +74,25 @@ export function ProductDetail({ productId }: ProductDetailProps) {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl space-y-6">
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1 text-caption text-text-muted hover:text-text"
-      >
-        <ArrowLeft className="size-3.5" />
-        All products
-      </Link>
+    <section className="mx-auto w-full max-w-6xl space-y-8">
+      <ProductHeader product={product} onDeleteClick={() => setConfirmOpen(true)} />
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <h1 className="text-heading text-text">{product.name}</h1>
-            <StatusBadge status={product.status} />
-          </div>
-          <p className="text-caption text-text-muted">
-            Target CPA {formatCurrency(product.targetCPA)}
-            {product.defaultCOGS !== undefined &&
-              ` · Default COGS ${formatCurrency(product.defaultCOGS)}`}
-          </p>
-          {product.notes && (
-            <p className="max-w-prose text-body text-text-muted">{product.notes}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/products/${productId}/edit`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          >
-            <Pencil className="size-4" />
-            Edit
-          </Link>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={() => setConfirmOpen(true)}
-          >
-            <Trash2 className="size-4" />
-            Delete
-          </Button>
-        </div>
-      </header>
+      <ProductOverview
+        productEntries={entries}
+        adsetEntriesByAdsetId={byAdsetId}
+        targetCPA={product.targetCPA}
+      />
 
-      <Tabs defaultValue="adsets" className="w-full">
-        <TabsList>
-          <TabsTrigger value="adsets">Adsets</TabsTrigger>
-          <TabsTrigger value="entries">Daily entries</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="adsets" className="space-y-4 pt-4">
-          <div className="flex justify-end">
-            <Link
-              href={`/products/${productId}/adsets/new`}
-              className={buttonVariants({ variant: 'default', size: 'sm' })}
-            >
-              <Plus className="size-4" />
-              New adset
-            </Link>
-          </div>
-
-          {adsetsLoading ? (
-            <Skeleton className="h-20" />
-          ) : adsets.length === 0 ? (
-            <EmptyState
-              icon={Layers}
-              title="No adsets yet"
-              description="Add an adset to start logging clicks, LPVs, ATCs, and ICs."
-              action={
-                <Link
-                  href={`/products/${productId}/adsets/new`}
-                  className={buttonVariants({ variant: 'default' })}
-                >
-                  <Plus className="size-4" />
-                  New adset
-                </Link>
-              }
-            />
-          ) : (
-            <ul className="space-y-3">
-              {adsets.map((adset) => (
-                <li key={adset.id}>
-                  <AdsetCard
-                    adset={adset}
-                    productId={productId}
-                    onDelete={handleDeleteAdset}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </TabsContent>
-
-        <TabsContent value="entries" className="pt-4">
-          <p className="text-caption text-text-muted">
-            Daily entry tracking lands in the next milestone.
-          </p>
-        </TabsContent>
-      </Tabs>
+      <ProductTabs
+        product={product}
+        entries={entries}
+        adsets={adsets}
+        adsetsLoading={adsetsLoading}
+        timezone={getBrowserTimezone()}
+        onSaveEntry={saveEntry}
+        onDeleteEntry={deleteEntry}
+        onDeleteAdset={handleDeleteAdset}
+      />
 
       <ConfirmDialog
         open={confirmOpen}

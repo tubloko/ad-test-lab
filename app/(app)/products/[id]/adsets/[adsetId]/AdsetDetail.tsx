@@ -7,14 +7,17 @@ import { ArrowLeft, Pencil, Trash2 } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useAdset } from '@/hooks/useAdset';
 import { useProduct } from '@/hooks/useProduct';
+import { useAdsetEntries } from '@/hooks/useAdsetEntries';
+import { useAdsetEntryMutations } from '@/hooks/useAdsetEntryMutations';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { AdsetEntriesTable } from '@/components/tables/AdsetEntriesTable';
 import { deleteAdset } from '@/lib/firebase/adsets';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
+import { getBrowserTimezone } from '@/lib/utils/date';
 
 interface AdsetDetailProps {
   productId: string;
@@ -26,11 +29,13 @@ export function AdsetDetail({ productId, adsetId }: AdsetDetailProps) {
   const { data: user } = useUser();
   const { data: product } = useProduct(productId);
   const { data: adset, loading, error } = useAdset(productId, adsetId);
+  const { data: entries } = useAdsetEntries(productId, adsetId);
+  const { saveEntry, deleteEntry } = useAdsetEntryMutations(productId, adsetId);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-4">
+      <div className="mx-auto w-full max-w-6xl space-y-4">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-40" />
       </div>
@@ -47,7 +52,7 @@ export function AdsetDetail({ productId, adsetId }: AdsetDetailProps) {
 
   if (!adset) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-3 text-center">
+      <div className="mx-auto w-full max-w-6xl space-y-3 text-center">
         <p className="text-subheading text-text">Adset not found.</p>
         <Link
           href={`/products/${productId}`}
@@ -66,7 +71,7 @@ export function AdsetDetail({ productId, adsetId }: AdsetDetailProps) {
   };
 
   return (
-    <section className="mx-auto w-full max-w-3xl space-y-6">
+    <section className="mx-auto w-full max-w-6xl space-y-6">
       <Link
         href={`/products/${productId}`}
         className="inline-flex items-center gap-1 text-caption text-text-muted hover:text-text"
@@ -106,16 +111,12 @@ export function AdsetDetail({ productId, adsetId }: AdsetDetailProps) {
         </div>
       </header>
 
-      <Tabs defaultValue="entries" className="w-full">
-        <TabsList>
-          <TabsTrigger value="entries">Daily entries</TabsTrigger>
-        </TabsList>
-        <TabsContent value="entries" className="pt-4">
-          <p className="text-caption text-text-muted">
-            Daily entry tracking lands in the next milestone.
-          </p>
-        </TabsContent>
-      </Tabs>
+      <AdsetEntriesTable
+        entries={entries}
+        timezone={getBrowserTimezone()}
+        onSaveEntry={saveEntry}
+        onDeleteEntry={deleteEntry}
+      />
 
       <ConfirmDialog
         open={confirmOpen}
