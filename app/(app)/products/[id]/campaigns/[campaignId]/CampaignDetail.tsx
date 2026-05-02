@@ -21,10 +21,12 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { StickyVerdictBar } from '@/components/verdict/StickyVerdictBar';
 import { CampaignEntriesTable } from '@/components/tables/CampaignEntriesTable';
 import { AdsetAccordion } from '@/components/AdsetAccordion';
+import { NewAdsetDialog } from '@/components/forms/NewAdsetDialog';
 import { SpendVsRevenueChart } from '@/components/charts/SpendVsRevenueChart';
 import { CPATrendChart } from '@/components/charts/CPATrendChart';
 import { deleteCampaign } from '@/lib/firebase/campaigns';
-import { deleteAdset } from '@/lib/firebase/adsets';
+import { createAdset, deleteAdset } from '@/lib/firebase/adsets';
+import type { AdsetInput } from '@/types/adset';
 import { rangeStartDate } from '@/lib/utils/dateRange';
 import { todayInTimezone, getBrowserTimezone } from '@/lib/utils/date';
 
@@ -65,6 +67,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
   });
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [newAdsetOpen, setNewAdsetOpen] = useState(false);
 
   if (loading) {
     return (
@@ -106,6 +109,11 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
   const handleDeleteAdset = async (adsetId: string) => {
     if (!user) return;
     await deleteAdset(user.uid, productId, campaignId, adsetId);
+  };
+
+  const handleCreateAdset = async (data: AdsetInput) => {
+    if (!user) return;
+    await createAdset(user.uid, productId, campaignId, data);
   };
 
   const hasAnyData = entries.length > 0 || adsetIds.some((id) => (byAdsetId[id]?.length ?? 0) > 0);
@@ -182,13 +190,15 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-subheading text-text">Adsets</h2>
-          <Link
-            href={`/products/${productId}/campaigns/${campaignId}/adsets/new`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setNewAdsetOpen(true)}
           >
             <Plus className="size-4" />
             New adset
-          </Link>
+          </Button>
         </div>
         {adsets.length === 0 ? (
           <EmptyState
@@ -221,6 +231,13 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         title={`Delete "${campaign.name}"?`}
         description="This will permanently delete the campaign, its adsets, and every daily entry."
         onConfirm={handleDeleteCampaign}
+      />
+
+      <NewAdsetDialog
+        open={newAdsetOpen}
+        onOpenChange={setNewAdsetOpen}
+        productName={product?.name ?? ''}
+        onSubmit={handleCreateAdset}
       />
     </section>
   );
