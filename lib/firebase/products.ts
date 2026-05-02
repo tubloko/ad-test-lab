@@ -32,6 +32,9 @@ export async function updateProduct(
   await updateDoc(ref, { ...input, updatedAt: serverTimestamp() });
 }
 
+// TODO: Firestore does not delete subcollections when a parent doc is deleted.
+// Adsets, entries, and diagnoses under this product remain orphaned.
+// Before launch, replace with a Cloud Function or batched recursive delete.
 export async function deleteProduct(uid: string, productId: string): Promise<void> {
   const ref = doc(db, paths.product(uid, productId));
   await deleteDoc(ref);
