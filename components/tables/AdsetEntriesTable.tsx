@@ -410,16 +410,18 @@ export function AdsetEntriesTable({
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 function buildPayload(next: RowDraft): AdsetEntryInput {
-  const purchases = parseNum(next.purchases);
-  const ctr = parseNum(next.ctr);
+  // Always include every field — including optional ones at 0 — so that
+  // clearing a cell actually overwrites the previous stored value. With
+  // setDoc({ merge: true }), an omitted field would be preserved, which
+  // makes "type then clear" leave stale data behind.
   return {
     spend: parseNum(next.spend),
     clicks: Math.round(parseNum(next.clicks)),
     lpv: Math.round(parseNum(next.lpv)),
     atc: Math.round(parseNum(next.atc)),
     ic: Math.round(parseNum(next.ic)),
-    ...(purchases > 0 ? { purchases: Math.round(purchases) } : {}),
-    ...(ctr > 0 ? { ctr } : {}),
+    purchases: Math.round(parseNum(next.purchases)),
+    ctr: parseNum(next.ctr),
   };
 }
 
