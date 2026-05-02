@@ -13,7 +13,7 @@ A decision tool for Shopify founders running Meta ad tests. Users enter daily ad
 
 ## Tech Stack (locked, do not deviate)
 
-- **Frontend:** Next.js 14 App Router, TypeScript, Tailwind, shadcn/ui
+- **Frontend:** Next.js 16 App Router, TypeScript, Tailwind, shadcn/ui
 - **Backend:** Firebase (Auth + Firestore)
 - **AI:** Claude Sonnet 4.5 via `@anthropic-ai/sdk` in Next.js API routes
 - **Forms:** react-hook-form + zod
