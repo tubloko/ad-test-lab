@@ -83,7 +83,7 @@ Path: `users/{uid}/products/{productId}/campaigns/{campaignId}/adsets/{adsetId}`
 | `name` | string | full Meta-style: `"SA \| TOF \| Storm Machine \| tier1 \| 60$"` |
 | `audience` | string | optional — `"tier1"`, `"tier2"`, free text |
 | `funnelStage` | `'TOF' \| 'MOF' \| 'BOF'` | top/middle/bottom of funnel |
-| `budget` | number | USD daily budget |
+| `budget` | number | optional — USD daily budget; omit for CBO (campaign-level budget) |
 | `status` | `'active' \| 'paused' \| 'killed'` | |
 | `createdAt` | Timestamp | server |
 | `updatedAt` | Timestamp | server |
@@ -202,7 +202,7 @@ export interface Adset {
   name: string;
   audience?: string;
   funnelStage: 'TOF' | 'MOF' | 'BOF';
-  budget: number;
+  budget?: number;
   status: 'active' | 'paused' | 'killed';
   createdAt: Date;
   updatedAt: Date;

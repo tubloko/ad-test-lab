@@ -115,7 +115,9 @@ function AdsetItem({
           <Badge variant="outline">{adset.funnelStage}</Badge>
           <StatusBadge status={adset.status} />
           <span className="text-caption text-text-muted">
-            Budget {formatCurrency(adset.budget)}/day
+            {adset.budget && adset.budget > 0
+              ? `Budget ${formatCurrency(adset.budget)}/day`
+              : 'CBO'}
           </span>
         </div>
 

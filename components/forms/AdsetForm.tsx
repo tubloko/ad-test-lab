@@ -123,14 +123,14 @@ export function AdsetForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="budget">Daily budget (USD)</Label>
+        <Label htmlFor="budget">Daily budget (USD, optional)</Label>
         <Input
           id="budget"
           type="number"
           inputMode="decimal"
           step="0.01"
           min="0"
-          placeholder="e.g. 30"
+          placeholder="Leave blank for CBO"
           aria-invalid={Boolean(errors.budget)}
           {...register('budget', { setValueAs: numberSetValueAs })}
         />

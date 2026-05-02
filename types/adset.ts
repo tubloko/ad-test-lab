@@ -10,7 +10,7 @@ export const AdsetInputSchema = z.object({
   name: z.string().trim().min(1).max(200),
   audience: z.string().trim().max(60).optional(),
   funnelStage: FunnelStageSchema,
-  budget: z.number().positive(),
+  budget: z.number().positive().optional(),
   status: AdsetStatusSchema.optional(),
 });
 
