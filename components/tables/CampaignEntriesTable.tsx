@@ -44,11 +44,12 @@ interface CampaignEntriesTableProps {
   onDeleteEntry: (date: string) => Promise<void>;
 }
 
-// Spend is a derived display column — never editable.
-const EDITABLE_COLS = ['revenue', 'orders', 'cogs'] as const;
+// Spend is editable but adsets win when they have data for the date.
+const EDITABLE_COLS = ['spend', 'revenue', 'orders', 'cogs'] as const;
 type EditableField = (typeof EDITABLE_COLS)[number];
 
 interface RowDraft {
+  spend: string;
   revenue: string;
   orders: string;
   cogs: string;
@@ -56,13 +57,14 @@ interface RowDraft {
 
 function toDraft(entry: EnrichedCampaignEntry): RowDraft {
   return {
+    spend: entry.spend ? String(entry.spend) : '',
     revenue: entry.revenue ? String(entry.revenue) : '',
     orders: entry.orders ? String(entry.orders) : '',
     cogs: entry.cogs ? String(entry.cogs) : '',
   };
 }
 
-const EMPTY_DRAFT: RowDraft = { revenue: '', orders: '', cogs: '' };
+const EMPTY_DRAFT: RowDraft = { spend: '', revenue: '', orders: '', cogs: '' };
 
 interface ExtraRow {
   tempId: string;
@@ -113,12 +115,13 @@ export function CampaignEntriesTable({
     ]);
   };
 
+  // Old → new (ascending). Today's row ends up at the bottom.
   const sortedExtras = useMemo(
-    () => [...extras].sort((a, b) => b.date.localeCompare(a.date)),
+    () => [...extras].sort((a, b) => a.date.localeCompare(b.date)),
     [extras],
   );
   const sortedEntries = useMemo(
-    () => [...filtered].sort((a, b) => b.date.localeCompare(a.date)),
+    () => [...filtered].sort((a, b) => a.date.localeCompare(b.date)),
     [filtered],
   );
 
@@ -128,8 +131,8 @@ export function CampaignEntriesTable({
     colCount: EDITABLE_COLS.length,
   });
 
-  // Totals mirror the verdict aggregator: spend comes from adsets, all
-  // other money/orders comes from campaign entries.
+  // Totals mirror the verdict aggregator: adsets win for a date when
+  // they have data; otherwise the campaign-entry's typed spend is used.
   const totals = useMemo(() => {
     const campaignByDate = new Map(filtered.map((e) => [e.date, e]));
     const allDates = new Set<string>(campaignByDate.keys());
@@ -141,7 +144,11 @@ export function CampaignEntriesTable({
     let orders = 0;
     let cogsTotal = 0;
     for (const date of allDates) {
-      spend += adsetSpendByDate.get(date) ?? 0;
+      if (adsetSpendByDate.has(date)) {
+        spend += adsetSpendByDate.get(date) ?? 0;
+      } else {
+        spend += campaignByDate.get(date)?.spend ?? 0;
+      }
       const ce = campaignByDate.get(date);
       if (ce) {
         revenue += ce.revenue;
@@ -348,11 +355,13 @@ function ExtraRowComponent({
     [],
   );
 
+  const adsetWins = adsetSpendSum > 0; // adset data for the date overrides
+
   const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
       await onSaveEntry(date, {
-        spend: adsetSpendSum,
+        spend: parseNum(next.spend),
         revenue: parseNum(next.revenue),
         orders: Math.round(parseNum(next.orders)),
         cogs: parseNum(next.cogs),
@@ -372,6 +381,7 @@ function ExtraRowComponent({
   };
 
   const handleChange = (field: EditableField, raw: string) => {
+    if (field === 'spend' && adsetWins) return; // ignore — adset wins
     const next = { ...draft, [field]: raw };
     setDraft(next);
     scheduleSave(next);
@@ -396,7 +406,7 @@ function ExtraRowComponent({
   const orders = Math.round(parseNum(draft.orders));
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
-  const spend = adsetSpendSum;
+  const spend = adsetWins ? adsetSpendSum : parseNum(draft.spend);
   const cpaValue = cpa(spend, orders);
   const roasValue = roas(revenue, spend);
   const profitValue = profit(revenue, spend, cogs);
@@ -414,21 +424,15 @@ function ExtraRowComponent({
         />
       </TableCell>
 
-      <TableCell className="text-right text-mono text-text-muted">
-        <SpendDisplay value={spend} />
-      </TableCell>
-
       {EDITABLE_COLS.map((field, i) => (
         <TableCell key={field} className="text-right">
-          <Input
-            ref={grid.getRef(row, i)}
-            type="number"
-            inputMode={field === 'orders' ? 'numeric' : 'decimal'}
-            step={field === 'orders' ? '1' : '0.01'}
-            min={0}
+          <SpendOrInput
+            field={field}
+            adsetWins={adsetWins}
+            adsetSpendSum={adsetSpendSum}
             value={draft[field]}
-            placeholder="0"
-            onChange={(e) => handleChange(field, e.target.value)}
+            inputRef={grid.getRef(row, i)}
+            onChange={(v) => handleChange(field, v)}
             onBlur={handleBlur}
             onKeyDown={(e) => {
               if (e.key === 'Escape') handleEsc();
@@ -520,7 +524,7 @@ function SavedEntryRow({
     setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
     setPendingDate(entry.date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry.revenue, entry.orders, entry.cogs, entry.date]);
+  }, [entry.spend, entry.revenue, entry.orders, entry.cogs, entry.date]);
 
   useEffect(
     () => () => {
@@ -530,11 +534,13 @@ function SavedEntryRow({
     [],
   );
 
+  const adsetWins = entry.adsetSpendSum > 0;
+
   const flushSave = async (next: RowDraft) => {
     setStatus('saving');
     try {
       await onSaveEntry(entry.date, {
-        spend: entry.adsetSpendSum,
+        spend: parseNum(next.spend),
         revenue: parseNum(next.revenue),
         orders: Math.round(parseNum(next.orders)),
         cogs: parseNum(next.cogs),
@@ -554,6 +560,7 @@ function SavedEntryRow({
   };
 
   const handleChange = (field: EditableField, raw: string) => {
+    if (field === 'spend' && adsetWins) return;
     const next = { ...draft, [field]: raw };
     setDraft(next);
     scheduleSave(next);
@@ -576,7 +583,7 @@ function SavedEntryRow({
     setStatus('saving');
     try {
       await onSaveEntry(pendingDate, {
-        spend: entry.adsetSpendSum,
+        spend: parseNum(draft.spend),
         revenue: parseNum(draft.revenue),
         orders: Math.round(parseNum(draft.orders)),
         cogs: parseNum(draft.cogs),
@@ -593,7 +600,7 @@ function SavedEntryRow({
   const orders = Math.round(parseNum(draft.orders));
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
-  const spend = entry.adsetSpendSum;
+  const spend = adsetWins ? entry.adsetSpendSum : parseNum(draft.spend);
   const cpaValue = cpa(spend, orders);
   const roasValue = roas(revenue, spend);
   const profitValue = profit(revenue, spend, cogs);
@@ -611,21 +618,15 @@ function SavedEntryRow({
         />
       </TableCell>
 
-      <TableCell className="text-right text-mono text-text-muted">
-        <SpendDisplay value={spend} />
-      </TableCell>
-
       {EDITABLE_COLS.map((field, i) => (
         <TableCell key={field} className="text-right">
-          <Input
-            ref={grid.getRef(row, i)}
-            type="number"
-            inputMode={field === 'orders' ? 'numeric' : 'decimal'}
-            step={field === 'orders' ? '1' : '0.01'}
-            min={0}
+          <SpendOrInput
+            field={field}
+            adsetWins={adsetWins}
+            adsetSpendSum={entry.adsetSpendSum}
             value={draft[field]}
-            placeholder="0"
-            onChange={(e) => handleChange(field, e.target.value)}
+            inputRef={grid.getRef(row, i)}
+            onChange={(v) => handleChange(field, v)}
             onBlur={handleBlur}
             onKeyDown={(e) => {
               if (e.key === 'Escape') handleEsc();
@@ -708,15 +709,55 @@ function DateInput({
   );
 }
 
-function SpendDisplay({ value }: { value: number }) {
+function SpendOrInput({
+  field,
+  adsetWins,
+  adsetSpendSum,
+  value,
+  inputRef,
+  onChange,
+  onBlur,
+  onKeyDown,
+  ...rest
+}: {
+  field: EditableField;
+  adsetWins: boolean;
+  adsetSpendSum: number;
+  value: string;
+  inputRef: (el: HTMLInputElement | null) => void;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  'aria-label': string;
+  className: string;
+}) {
+  if (field === 'spend' && adsetWins) {
+    return (
+      <span
+        title="Auto-summed from adsets — adsets override the daily-table spend when they have data for the date"
+        className="inline-flex items-center justify-end gap-1 text-mono text-text-muted"
+      >
+        <Sigma className="size-3 text-text-subtle" />
+        <span className="tabular-nums">{formatCurrency(adsetSpendSum)}</span>
+      </span>
+    );
+  }
+
   return (
-    <span
-      title="Auto-summed from adsets"
-      className="inline-flex items-center gap-1"
-    >
-      <Sigma className="size-3 text-text-subtle" />
-      <span className="tabular-nums">{formatCurrency(value)}</span>
-    </span>
+    <Input
+      ref={inputRef}
+      type="number"
+      inputMode={field === 'orders' ? 'numeric' : 'decimal'}
+      step={field === 'orders' ? '1' : '0.01'}
+      min={0}
+      value={value}
+      placeholder="0"
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
+      aria-label={rest['aria-label']}
+      className={rest.className}
+    />
   );
 }
 

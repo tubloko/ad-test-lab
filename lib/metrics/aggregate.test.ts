@@ -140,6 +140,15 @@ describe('aggregateCampaignForVerdict', () => {
     expect(input.daysActive).toBe(2);
   });
 
+  it('falls back to campaign-entry spend on dates with no adset data', () => {
+    const campaign = [
+      ce('2026-05-01', { spend: 100, revenue: 200, orders: 2, cogs: 20 }),
+    ];
+    const adset: AdsetEntry[] = []; // no adset data for this date
+    const input = aggregateCampaignForVerdict(campaign, [adset], ALL_TIME, 60);
+    expect(input.totalSpend).toBe(100);
+  });
+
   it('counts a date that has only adset spend toward daysActive', () => {
     const campaign: CampaignEntry[] = [];
     const adset = [ae('2026-05-01', { spend: 50 })];

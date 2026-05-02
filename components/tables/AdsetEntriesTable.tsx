@@ -121,12 +121,13 @@ export function AdsetEntriesTable({
     ]);
   };
 
+  // Old → new (ascending). Today's row sits at the bottom.
   const sortedExtras = useMemo(
-    () => [...extras].sort((a, b) => b.date.localeCompare(a.date)),
+    () => [...extras].sort((a, b) => a.date.localeCompare(b.date)),
     [extras],
   );
   const sortedEntries = useMemo(
-    () => [...filtered].sort((a, b) => b.date.localeCompare(a.date)),
+    () => [...filtered].sort((a, b) => a.date.localeCompare(b.date)),
     [filtered],
   );
 

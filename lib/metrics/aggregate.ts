@@ -40,9 +40,13 @@ export function aggregateAdsetEntries(
 /**
  * Roll up a campaign + its adsets into a VerdictInput.
  *
- * Spend always comes from the sum of adset entries for the date —
- * adsets are the source of truth for spend, period. Any `spend` /
- * `spendOverride` value stored on a campaign entry is ignored.
+ * Spend resolution per date:
+ *   - If any adset has an entry for the date, sum the adset spends —
+ *     adsets win and the campaign-entry's stored spend is ignored for
+ *     that date.
+ *   - If no adset has any entry for the date, fall back to the campaign
+ *     entry's stored spend (the user typed it manually for a day with
+ *     no adset breakdown).
  *
  * `daysActive` counts unique dates with ANY activity (campaign-level data
  * or any adset spend), so a day where you only entered adset numbers
@@ -90,7 +94,11 @@ export function aggregateCampaignForVerdict(
   let totalCOGS = 0;
 
   for (const date of allDates) {
-    totalSpend += adsetSpendByDate.get(date) ?? 0;
+    if (adsetSpendByDate.has(date)) {
+      totalSpend += adsetSpendByDate.get(date) ?? 0;
+    } else {
+      totalSpend += campaignByDate.get(date)?.spend ?? 0;
+    }
     const ce = campaignByDate.get(date);
     if (ce) {
       totalRevenue += ce.revenue;
