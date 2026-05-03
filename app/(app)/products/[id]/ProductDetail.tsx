@@ -14,14 +14,16 @@ import { EmptyState } from '@/components/EmptyState';
 import { CampaignCard } from '@/components/CampaignCard';
 import { ProductKPISummary } from '@/components/ProductKPISummary';
 import { NewCampaignDialog } from '@/components/forms/NewCampaignDialog';
+import { EditProductDialog } from '@/components/forms/EditProductDialog';
 import { ProductHeader } from './ProductHeader';
-import { deleteProduct } from '@/lib/firebase/products';
+import { deleteProduct, updateProduct } from '@/lib/firebase/products';
 import {
   createCampaign,
   deleteCampaign,
   updateCampaign,
 } from '@/lib/firebase/campaigns';
 import type { CampaignInput, CampaignStatus } from '@/types/campaign';
+import type { ProductInput } from '@/types/product';
 
 interface ProductDetailProps {
   productId: string;
@@ -34,6 +36,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
   const { data: campaigns, loading: campaignsLoading } = useCampaigns(productId);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [editProductOpen, setEditProductOpen] = useState(false);
 
   if (loading) {
     return (
@@ -92,9 +95,18 @@ export function ProductDetail({ productId }: ProductDetailProps) {
     await updateCampaign(user.uid, productId, campaignId, { status });
   };
 
+  const handleEditProduct = async (data: ProductInput) => {
+    if (!user) return;
+    await updateProduct(user.uid, productId, data);
+  };
+
   return (
     <section className="mx-auto w-full max-w-6xl space-y-8">
-      <ProductHeader product={product} onDeleteClick={() => setConfirmOpen(true)} />
+      <ProductHeader
+        product={product}
+        onEditClick={() => setEditProductOpen(true)}
+        onDeleteClick={() => setConfirmOpen(true)}
+      />
 
       <ProductKPISummary
         productId={productId}
@@ -172,6 +184,13 @@ export function ProductDetail({ productId }: ProductDetailProps) {
         onOpenChange={setNewCampaignOpen}
         productName={product.name}
         onSubmit={handleCreateCampaign}
+      />
+
+      <EditProductDialog
+        open={editProductOpen}
+        onOpenChange={setEditProductOpen}
+        product={product}
+        onSubmit={handleEditProduct}
       />
     </section>
   );

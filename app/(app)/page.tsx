@@ -1,22 +1,38 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Plus, Package } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useProducts } from '@/hooks/useProducts';
 import { ProductCard } from '@/components/ProductCard';
 import { EmptyState } from '@/components/EmptyState';
-import { buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { deleteProduct } from '@/lib/firebase/products';
+import { NewProductDialog } from '@/components/forms/NewProductDialog';
+import { createProduct, deleteProduct, updateProduct } from '@/lib/firebase/products';
+import type { ProductInput } from '@/types/product';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { data: user } = useUser();
   const { data: products, loading, error } = useProducts();
+  const [newOpen, setNewOpen] = useState(false);
+
+  const handleCreate = async (data: ProductInput) => {
+    if (!user) return;
+    const id = await createProduct(user.uid, data);
+    router.push(`/products/${id}`);
+  };
 
   const handleDelete = async (productId: string) => {
     if (!user) return;
     await deleteProduct(user.uid, productId);
+  };
+
+  const handleEdit = async (productId: string, data: ProductInput) => {
+    if (!user) return;
+    await updateProduct(user.uid, productId, data);
   };
 
   return (
@@ -28,10 +44,10 @@ export default function DashboardPage() {
             Each product is a separate ad test. Add adsets and daily numbers to get a verdict.
           </p>
         </div>
-        <Link href="/products/new" className={buttonVariants({ variant: 'default' })}>
+        <Button type="button" onClick={() => setNewOpen(true)}>
           <Plus className="size-4" />
           New product
-        </Link>
+        </Button>
       </header>
 
       {loading ? (
@@ -49,21 +65,27 @@ export default function DashboardPage() {
           title="No products yet"
           description="Create your first product to start tracking ad tests."
           action={
-            <Link href="/products/new" className={buttonVariants({ variant: 'default' })}>
+            <Button type="button" onClick={() => setNewOpen(true)}>
               <Plus className="size-4" />
               New product
-            </Link>
+            </Button>
           }
         />
       ) : (
         <ul className="space-y-3">
           {products.map((product) => (
             <li key={product.id}>
-              <ProductCard product={product} onDelete={handleDelete} />
+              <ProductCard product={product} onDelete={handleDelete} onEdit={handleEdit} />
             </li>
           ))}
         </ul>
       )}
+
+      <NewProductDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        onSubmit={handleCreate}
+      />
     </section>
   );
 }

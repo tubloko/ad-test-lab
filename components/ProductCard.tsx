@@ -3,20 +3,23 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from './StatusBadge';
 import { ConfirmDialog } from './ConfirmDialog';
+import { EditProductDialog } from '@/components/forms/EditProductDialog';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
-import type { Product } from '@/types/product';
+import type { Product, ProductInput } from '@/types/product';
 
 interface ProductCardProps {
   product: Product;
   onDelete: (id: string) => Promise<void> | void;
+  onEdit: (id: string, data: ProductInput) => Promise<void>;
 }
 
-export function ProductCard({ product, onDelete }: ProductCardProps) {
+export function ProductCard({ product, onDelete, onEdit }: ProductCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
     <Card className="flex-row items-center justify-between gap-4">
@@ -31,13 +34,15 @@ export function ProductCard({ product, onDelete }: ProductCardProps) {
       </Link>
 
       <div className="flex shrink-0 items-center gap-1">
-        <Link
-          href={`/products/${product.id}/edit`}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
           aria-label="Edit product"
-          className={buttonVariants({ variant: 'ghost', size: 'icon' })}
+          onClick={() => setEditOpen(true)}
         >
           <Pencil className="size-4" />
-        </Link>
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -55,6 +60,13 @@ export function ProductCard({ product, onDelete }: ProductCardProps) {
         title={`Delete "${product.name}"?`}
         description="This will permanently delete the product. All adsets and daily entries under it will also be deleted."
         onConfirm={() => onDelete(product.id)}
+      />
+
+      <EditProductDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        product={product}
+        onSubmit={(data) => onEdit(product.id, data)}
       />
     </Card>
   );

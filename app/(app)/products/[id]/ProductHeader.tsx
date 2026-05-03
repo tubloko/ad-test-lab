@@ -2,17 +2,18 @@
 
 import Link from 'next/link';
 import { ArrowLeft, Pencil, Trash2 } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import type { Product } from '@/types/product';
 
 interface ProductHeaderProps {
   product: Product;
+  onEditClick: () => void;
   onDeleteClick: () => void;
 }
 
-export function ProductHeader({ product, onDeleteClick }: ProductHeaderProps) {
+export function ProductHeader({ product, onEditClick, onDeleteClick }: ProductHeaderProps) {
   return (
     <div className="space-y-4">
       <Link
@@ -39,13 +40,10 @@ export function ProductHeader({ product, onDeleteClick }: ProductHeaderProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href={`/products/${product.id}/edit`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={onEditClick}>
             <Pencil className="size-4" />
             Edit
-          </Link>
+          </Button>
           <Button
             type="button"
             variant="destructive"
