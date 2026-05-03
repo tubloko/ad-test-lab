@@ -160,7 +160,7 @@ function AdsetItem({
   );
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+    <div className="rounded-lg border border-border bg-surface">
       <details
         open={open}
         onToggle={(e) => onOpenChange((e.currentTarget as HTMLDetailsElement).open)}

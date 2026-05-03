@@ -86,7 +86,13 @@ export function StatusMenu<T extends AnyStatus>({
     <div
       ref={containerRef}
       className="relative inline-flex"
-      onClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        // stopPropagation prevents parent disclosure widgets from toggling;
+        // preventDefault stops the native anchor-click navigation when this
+        // menu is rendered inside a wrapping <Link>.
+        e.stopPropagation();
+        e.preventDefault();
+      }}
       onKeyDown={(e) => e.stopPropagation()}
     >
       <button
