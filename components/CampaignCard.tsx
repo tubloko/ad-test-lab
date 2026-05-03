@@ -21,11 +21,13 @@ import {
   type CampaignInput,
   type CampaignStatus,
 } from '@/types/campaign';
+import type { ProductFees } from '@/types/product';
 
 interface CampaignCardProps {
   productId: string;
   campaign: Campaign;
   targetCPA: number;
+  fees?: ProductFees;
   onDelete: (id: string) => Promise<void> | void;
   onEdit: (id: string, data: CampaignInput) => Promise<void>;
   onStatusChange: (id: string, status: CampaignStatus) => Promise<void>;
@@ -37,6 +39,7 @@ export function CampaignCard({
   productId,
   campaign,
   targetCPA,
+  fees,
   onDelete,
   onEdit,
   onStatusChange,
@@ -73,13 +76,14 @@ export function CampaignCard({
     adsetEntries,
     targetCPA,
     range: ALL_TIME,
+    fees,
   });
 
   const cpa = result.metrics.cpa;
   const profit = result.metrics.profit;
 
   return (
-    <Card className="flex-row items-stretch justify-between gap-4">
+    <Card className="flex-row items-stretch justify-between gap-4 overflow-visible">
       <Link
         href={`/products/${productId}/campaigns/${campaign.id}`}
         className="flex flex-1 min-w-0 flex-col gap-3"

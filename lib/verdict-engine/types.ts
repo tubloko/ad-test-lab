@@ -19,6 +19,13 @@ export interface VerdictInput {
   daysActive: number;
 
   targetCPA: number;
+
+  // Optional fee adjustments — when undefined, treated as 0 so behavior
+  // matches the pre-fees verdict engine.
+  transactionFeePercent?: number;
+  transactionFeeFixed?: number;
+  shippingCost?: number;
+  refundRate?: number;
 }
 
 export interface VerdictMetrics {

@@ -35,6 +35,10 @@ export function toProduct(raw: Raw & { id: string }): Product {
     defaultCOGS: raw.defaultCOGS,
     status: raw.status,
     notes: raw.notes,
+    transactionFeePercent: raw.transactionFeePercent,
+    transactionFeeFixed: raw.transactionFeeFixed,
+    shippingCost: raw.shippingCost,
+    refundRate: raw.refundRate,
     createdAt: toDate(raw.createdAt),
     updatedAt: toDate(raw.updatedAt),
   };

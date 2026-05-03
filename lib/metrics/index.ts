@@ -1,6 +1,8 @@
 export { cpa } from './cpa';
 export { roas } from './roas';
 export { profit } from './profit';
+export { computeProfitWithFees, hasAnyFees } from './profitWithFees';
+export type { ProfitInput, ProfitBreakdown } from './profitWithFees';
 export { ctr } from './ctr';
 export { lpvRate } from './lpvRate';
 export { atcRate } from './atcRate';

@@ -194,4 +194,45 @@ describe('aggregateCampaignForVerdict', () => {
       targetCPA: 60,
     });
   });
+
+  it('leaves fee fields undefined when no fees argument is passed', () => {
+    const input = aggregateCampaignForVerdict([ce('2026-05-01')], [[]], ALL_TIME, 60);
+    expect(input.transactionFeePercent).toBeUndefined();
+    expect(input.transactionFeeFixed).toBeUndefined();
+    expect(input.shippingCost).toBeUndefined();
+    expect(input.refundRate).toBeUndefined();
+  });
+
+  it('threads full fee bundle through to the VerdictInput', () => {
+    const input = aggregateCampaignForVerdict(
+      [ce('2026-05-01', { revenue: 100 })],
+      [[]],
+      ALL_TIME,
+      60,
+      {
+        transactionFeePercent: 2.9,
+        transactionFeeFixed: 0.3,
+        shippingCost: 5,
+        refundRate: 1,
+      },
+    );
+    expect(input.transactionFeePercent).toBe(2.9);
+    expect(input.transactionFeeFixed).toBe(0.3);
+    expect(input.shippingCost).toBe(5);
+    expect(input.refundRate).toBe(1);
+  });
+
+  it('threads partial fee bundle (only the provided keys are set)', () => {
+    const input = aggregateCampaignForVerdict(
+      [ce('2026-05-01')],
+      [[]],
+      ALL_TIME,
+      60,
+      { shippingCost: 5 },
+    );
+    expect(input.shippingCost).toBe(5);
+    expect(input.transactionFeePercent).toBeUndefined();
+    expect(input.transactionFeeFixed).toBeUndefined();
+    expect(input.refundRate).toBeUndefined();
+  });
 });

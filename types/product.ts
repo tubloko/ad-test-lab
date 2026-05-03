@@ -9,6 +9,10 @@ export const ProductInputSchema = z.object({
   defaultCOGS: z.number().min(0).optional(),
   status: ProductStatusSchema.optional(),
   notes: z.string().max(2000).optional(),
+  transactionFeePercent: z.number().min(0).max(100).optional(),
+  transactionFeeFixed: z.number().min(0).optional(),
+  shippingCost: z.number().min(0).optional(),
+  refundRate: z.number().min(0).max(100).optional(),
 });
 
 export const ProductSchema = ProductInputSchema.extend({
@@ -21,3 +25,10 @@ export const ProductSchema = ProductInputSchema.extend({
 export type ProductInput = z.infer<typeof ProductInputSchema>;
 export type ProductStatus = z.infer<typeof ProductStatusSchema>;
 export type Product = z.infer<typeof ProductSchema>;
+
+export interface ProductFees {
+  transactionFeePercent?: number;
+  transactionFeeFixed?: number;
+  shippingCost?: number;
+  refundRate?: number;
+}

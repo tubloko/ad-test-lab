@@ -1,10 +1,22 @@
+import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
 import type { VerdictInput, VerdictMetrics } from './types';
 
 export function computeMetrics(input: VerdictInput): VerdictMetrics {
+  const { profit } = computeProfitWithFees({
+    revenue: input.totalRevenue,
+    spend: input.totalSpend,
+    cogs: input.totalCOGS,
+    orders: input.totalOrders,
+    transactionFeePercent: input.transactionFeePercent,
+    transactionFeeFixed: input.transactionFeeFixed,
+    shippingCost: input.shippingCost,
+    refundRate: input.refundRate,
+  });
+
   return {
     cpa: input.totalOrders === 0 ? Infinity : input.totalSpend / input.totalOrders,
     roas: input.totalSpend === 0 ? 0 : input.totalRevenue / input.totalSpend,
-    profit: input.totalRevenue - input.totalSpend - input.totalCOGS,
+    profit,
     // We don't collect impressions, so CTR can't be computed here.
     // The field is kept on the result shape for future use.
     ctr: 0,

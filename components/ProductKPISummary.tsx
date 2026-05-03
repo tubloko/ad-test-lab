@@ -8,16 +8,19 @@ import { useCampaignEntries } from '@/hooks/useCampaignEntries';
 import { useAdsets } from '@/hooks/useAdsets';
 import { useAllAdsetEntries } from '@/hooks/useAllAdsetEntries';
 import { aggregateCampaignForVerdict, type DateRange } from '@/lib/metrics/aggregate';
+import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
 import { rangeStartDate } from '@/lib/utils/dateRange';
 import { todayInTimezone, getBrowserTimezone } from '@/lib/utils/date';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { profitTone, TONE_TEXT_CLASS } from '@/lib/utils/threshold-color';
 import type { Campaign } from '@/types/campaign';
+import type { ProductFees } from '@/types/product';
 
 interface ProductKPISummaryProps {
   productId: string;
   campaigns: Campaign[];
   targetCPA: number;
+  fees?: ProductFees;
 }
 
 interface CampaignTotals {
@@ -32,6 +35,7 @@ export function ProductKPISummary({
   productId,
   campaigns,
   targetCPA,
+  fees,
 }: ProductKPISummaryProps) {
   const { preset, setPreset } = useDateRangePreset('14d');
   const today = todayInTimezone(getBrowserTimezone());
@@ -102,6 +106,7 @@ export function ProductKPISummary({
           productId={productId}
           campaignId={c.id}
           targetCPA={targetCPA}
+          fees={fees}
           range={range}
           onChange={publish}
         />
@@ -133,12 +138,14 @@ function CampaignTotalsReader({
   productId,
   campaignId,
   targetCPA,
+  fees,
   range,
   onChange,
 }: {
   productId: string;
   campaignId: string;
   targetCPA: number;
+  fees?: ProductFees;
   range: DateRange;
   onChange: (id: string, t: CampaignTotals) => void;
 }) {
@@ -147,15 +154,28 @@ function CampaignTotalsReader({
   const adsetIds = useMemo(() => adsets.map((a) => a.id), [adsets]);
   const { byAdsetId } = useAllAdsetEntries(productId, campaignId, adsetIds);
 
+  const feesKey = `${fees?.transactionFeePercent ?? ''}|${fees?.transactionFeeFixed ?? ''}|${fees?.shippingCost ?? ''}|${fees?.refundRate ?? ''}`;
+
   const totals = useMemo<CampaignTotals>(() => {
     const adsetEntries = adsetIds.map((id) => byAdsetId[id] ?? []);
-    const input = aggregateCampaignForVerdict(entries, adsetEntries, range, targetCPA);
+    const input = aggregateCampaignForVerdict(entries, adsetEntries, range, targetCPA, fees);
+    const { profit } = computeProfitWithFees({
+      revenue: input.totalRevenue,
+      spend: input.totalSpend,
+      cogs: input.totalCOGS,
+      orders: input.totalOrders,
+      transactionFeePercent: input.transactionFeePercent,
+      transactionFeeFixed: input.transactionFeeFixed,
+      shippingCost: input.shippingCost,
+      refundRate: input.refundRate,
+    });
     return {
       spend: input.totalSpend,
       revenue: input.totalRevenue,
-      profit: input.totalRevenue - input.totalSpend - input.totalCOGS,
+      profit,
     };
-  }, [entries, adsetIds, byAdsetId, range, targetCPA]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, adsetIds, byAdsetId, range, targetCPA, feesKey]);
 
   useEffect(() => {
     onChange(campaignId, totals);

@@ -1,5 +1,6 @@
 import type { CampaignEntry, AdsetEntry } from '@/types/entry';
 import type { VerdictInput } from '@/lib/verdict-engine';
+import type { ProductFees } from '@/types/product';
 
 export interface DateRange {
   from: string | null;
@@ -60,6 +61,7 @@ export function aggregateCampaignForVerdict(
   adsetEntries: AdsetEntry[][],
   range: DateRange,
   targetCPA: number,
+  fees?: ProductFees,
 ): VerdictInput {
   const campaignByDate = new Map<string, CampaignEntry>();
   for (const e of campaignEntries) {
@@ -118,5 +120,9 @@ export function aggregateCampaignForVerdict(
     totalIC,
     daysActive: allDates.size,
     targetCPA,
+    transactionFeePercent: fees?.transactionFeePercent,
+    transactionFeeFixed: fees?.transactionFeeFixed,
+    shippingCost: fees?.shippingCost,
+    refundRate: fees?.refundRate,
   };
 }

@@ -66,11 +66,26 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
   const range = useMemo(() => ({ from: fromDate, to: today }), [fromDate, today]);
 
   const targetCPA = product?.targetCPA ?? 0;
+  const fees = useMemo(
+    () => ({
+      transactionFeePercent: product?.transactionFeePercent,
+      transactionFeeFixed: product?.transactionFeeFixed,
+      shippingCost: product?.shippingCost,
+      refundRate: product?.refundRate,
+    }),
+    [
+      product?.transactionFeePercent,
+      product?.transactionFeeFixed,
+      product?.shippingCost,
+      product?.refundRate,
+    ],
+  );
   const { result, input } = useVerdict({
     campaignEntries: entries,
     adsetEntries,
     targetCPA,
     range,
+    fees,
   });
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -165,6 +180,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         targetCPA={targetCPA}
         preset={preset}
         onPresetChange={setPreset}
+        fees={fees}
       />
 
       <Link
@@ -219,10 +235,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         />
       )}
 
-      <details
-        open
-        className="group rounded-lg border border-border bg-surface"
-      >
+      <details className="group rounded-lg border border-border bg-surface">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
           <ChevronDown className="size-4 text-text-muted transition-transform group-open:rotate-0 -rotate-90" />
           <h2 className="text-subheading text-text">Daily entries</h2>
@@ -233,6 +246,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
             adsetSpendByDate={adsetSpendByDate}
             targetCPA={targetCPA}
             timezone={getBrowserTimezone()}
+            productFees={fees}
             onSaveEntry={saveEntry}
             onDeleteEntry={deleteEntry}
           />

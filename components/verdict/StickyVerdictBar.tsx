@@ -4,6 +4,8 @@ import type { VerdictResult } from '@/lib/verdict-engine';
 import type { VerdictInput } from '@/lib/verdict-engine';
 import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { VerdictBadge } from './VerdictBadge';
+import { ProfitBreakdownTooltip } from './ProfitBreakdownTooltip';
+import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import {
   cpaTone,
@@ -12,6 +14,7 @@ import {
   TONE_TEXT_CLASS,
 } from '@/lib/utils/threshold-color';
 import type { DateRangePreset } from '@/lib/utils/dateRange';
+import type { ProductFees } from '@/types/product';
 
 interface StickyVerdictBarProps {
   result: VerdictResult;
@@ -19,6 +22,7 @@ interface StickyVerdictBarProps {
   targetCPA: number;
   preset: DateRangePreset;
   onPresetChange: (preset: DateRangePreset) => void;
+  fees?: ProductFees;
 }
 
 export function StickyVerdictBar({
@@ -27,9 +31,21 @@ export function StickyVerdictBar({
   targetCPA,
   preset,
   onPresetChange,
+  fees,
 }: StickyVerdictBarProps) {
   const m = result.metrics;
   const hasOrders = input.totalOrders > 0;
+
+  const breakdown = computeProfitWithFees({
+    revenue: input.totalRevenue,
+    spend: input.totalSpend,
+    cogs: input.totalCOGS,
+    orders: input.totalOrders,
+    transactionFeePercent: input.transactionFeePercent,
+    transactionFeeFixed: input.transactionFeeFixed,
+    shippingCost: input.shippingCost,
+    refundRate: input.refundRate,
+  });
 
   return (
     <div className="sticky top-0 z-20 -mx-4 border-b border-border bg-bg/85 px-4 py-3 backdrop-blur-md md:-mx-8 md:px-8">
@@ -52,11 +68,18 @@ export function StickyVerdictBar({
             value={input.totalSpend > 0 ? m.roas.toFixed(2) : '—'}
             tone={input.totalSpend > 0 ? TONE_TEXT_CLASS[roasTone(m.roas)] : 'text-text-muted'}
           />
-          <Stat
-            label="Profit"
-            value={formatCurrency(m.profit)}
-            tone={TONE_TEXT_CLASS[profitTone(m.profit)]}
-          />
+          <ProfitBreakdownTooltip
+            fees={fees}
+            breakdown={breakdown}
+            spend={input.totalSpend}
+            cogs={input.totalCOGS}
+          >
+            <Stat
+              label="Profit"
+              value={formatCurrency(m.profit)}
+              tone={TONE_TEXT_CLASS[profitTone(m.profit)]}
+            />
+          </ProfitBreakdownTooltip>
           <Stat
             label="Days"
             value={String(input.daysActive)}

@@ -14,10 +14,18 @@ import { toProduct } from './converters';
 import { deleteCampaign } from './campaigns';
 import type { Product, ProductInput } from '@/types/product';
 
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(obj) as (keyof T)[]) {
+    if (obj[k] !== undefined) out[k] = obj[k];
+  }
+  return out;
+}
+
 export async function createProduct(uid: string, input: ProductInput): Promise<string> {
   const ref = collection(db, paths.products(uid));
   const docRef = await addDoc(ref, {
-    ...input,
+    ...stripUndefined(input),
     status: input.status ?? 'testing',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -31,7 +39,10 @@ export async function updateProduct(
   input: Partial<ProductInput>
 ): Promise<void> {
   const ref = doc(db, paths.product(uid, productId));
-  await updateDoc(ref, { ...input, updatedAt: serverTimestamp() });
+  await updateDoc(ref, {
+    ...stripUndefined(input),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**

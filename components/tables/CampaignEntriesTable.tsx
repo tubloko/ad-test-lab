@@ -25,7 +25,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { BackfillDialog } from '@/components/forms/BackfillDialog';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
-import { cpa, roas, profit } from '@/lib/metrics';
+import { cpa, roas } from '@/lib/metrics';
+import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatDate } from '@/lib/utils/formatDate';
 import { todayInTimezone, subtractDays } from '@/lib/utils/date';
@@ -43,6 +44,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { EnrichedCampaignEntry } from '@/hooks/useCampaignEntries';
 import type { CampaignEntryInput } from '@/types/entry';
+import type { ProductFees } from '@/types/product';
 
 interface CampaignEntriesTableProps {
   entries: EnrichedCampaignEntry[];
@@ -50,8 +52,28 @@ interface CampaignEntriesTableProps {
   adsetSpendByDate: Map<string, number>;
   targetCPA: number;
   timezone: string;
+  productFees?: ProductFees;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
+}
+
+function rowProfit(
+  revenue: number,
+  spend: number,
+  cogs: number,
+  orders: number,
+  fees?: ProductFees,
+): number {
+  return computeProfitWithFees({
+    revenue,
+    spend,
+    cogs,
+    orders,
+    transactionFeePercent: fees?.transactionFeePercent,
+    transactionFeeFixed: fees?.transactionFeeFixed,
+    shippingCost: fees?.shippingCost,
+    refundRate: fees?.refundRate,
+  }).profit;
 }
 
 // Spend is editable but adsets win when they have data for the date.
@@ -86,6 +108,7 @@ export function CampaignEntriesTable({
   adsetSpendByDate,
   targetCPA,
   timezone,
+  productFees,
   onSaveEntry,
   onDeleteEntry,
 }: CampaignEntriesTableProps) {
@@ -223,9 +246,10 @@ export function CampaignEntriesTable({
       cogs: cogsTotal,
       cpa: cpa(spend, orders),
       roas: roas(revenue, spend),
-      profit: profit(revenue, spend, cogsTotal),
+      profit: rowProfit(revenue, spend, cogsTotal, orders, productFees),
     };
-  }, [filtered, adsetSpendByDate, fromDate, today]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, adsetSpendByDate, fromDate, today, productFees?.transactionFeePercent, productFees?.transactionFeeFixed, productFees?.shippingCost, productFees?.refundRate]);
 
   // After we add a backfilled row (or detect duplicate), focus its spend cell.
   useEffect(() => {
@@ -286,6 +310,7 @@ export function CampaignEntriesTable({
                   date={r.date}
                   adsetSpendSum={adsetSpendByDate.get(r.date) ?? 0}
                   targetCPA={targetCPA}
+                  productFees={productFees}
                   grid={grid}
                   // Auto-derived rows (today, adset-only) re-appear after a
                   // local removal — hide the trash so users don't think it's
@@ -306,6 +331,7 @@ export function CampaignEntriesTable({
                   today={today}
                   entry={r.entry}
                   targetCPA={targetCPA}
+                  productFees={productFees}
                   grid={grid}
                   onSaveEntry={onSaveEntry}
                   onDeleteRequest={() => setPendingDelete(r.date)}
@@ -401,6 +427,7 @@ interface ExtraRowProps {
   date: string;
   adsetSpendSum: number;
   targetCPA: number;
+  productFees?: ProductFees;
   grid: ReturnType<typeof useGridNavigation>;
   removable: boolean;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
@@ -413,6 +440,7 @@ function ExtraRowComponent({
   date,
   adsetSpendSum,
   targetCPA,
+  productFees,
   grid,
   removable,
   onSaveEntry,
@@ -477,7 +505,7 @@ function ExtraRowComponent({
   const spend = adsetWins ? adsetSpendSum : parseNum(draft.spend);
   const cpaValue = cpa(spend, orders);
   const roasValue = roas(revenue, spend);
-  const profitValue = profit(revenue, spend, cogs);
+  const profitValue = rowProfit(revenue, spend, cogs, orders, productFees);
 
   const isToday = date === today;
   const isUntouched =
@@ -565,6 +593,7 @@ interface SavedEntryRowProps {
   today: string;
   entry: EnrichedCampaignEntry;
   targetCPA: number;
+  productFees?: ProductFees;
   grid: ReturnType<typeof useGridNavigation>;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
   onDeleteRequest: () => void;
@@ -575,6 +604,7 @@ function SavedEntryRow({
   today,
   entry,
   targetCPA,
+  productFees,
   grid,
   onSaveEntry,
   onDeleteRequest,
@@ -645,7 +675,7 @@ function SavedEntryRow({
   const spend = adsetWins ? entry.adsetSpendSum : parseNum(draft.spend);
   const cpaValue = cpa(spend, orders);
   const roasValue = roas(revenue, spend);
-  const profitValue = profit(revenue, spend, cogs);
+  const profitValue = rowProfit(revenue, spend, cogs, orders, productFees);
 
   const isToday = entry.date === today;
 

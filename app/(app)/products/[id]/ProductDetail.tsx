@@ -100,6 +100,12 @@ export function ProductDetail({ productId }: ProductDetailProps) {
         productId={productId}
         campaigns={campaigns}
         targetCPA={product.targetCPA}
+        fees={{
+          transactionFeePercent: product.transactionFeePercent,
+          transactionFeeFixed: product.transactionFeeFixed,
+          shippingCost: product.shippingCost,
+          refundRate: product.refundRate,
+        }}
       />
 
       <div className="space-y-3">
@@ -138,6 +144,12 @@ export function ProductDetail({ productId }: ProductDetailProps) {
                 productId={productId}
                 campaign={c}
                 targetCPA={product.targetCPA}
+                fees={{
+                  transactionFeePercent: product.transactionFeePercent,
+                  transactionFeeFixed: product.transactionFeeFixed,
+                  shippingCost: product.shippingCost,
+                  refundRate: product.refundRate,
+                }}
                 onDelete={handleDeleteCampaign}
                 onEdit={handleEditCampaign}
                 onStatusChange={handleCampaignStatusChange}
