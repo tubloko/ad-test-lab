@@ -20,3 +20,16 @@ export const CampaignSchema = CampaignInputSchema.extend({
 export type CampaignInput = z.infer<typeof CampaignInputSchema>;
 export type CampaignStatus = z.infer<typeof CampaignStatusSchema>;
 export type Campaign = z.infer<typeof CampaignSchema>;
+
+/**
+ * Allowed forward transitions from each status. Used by the status
+ * dropdown to hide options that don't make sense (e.g. you can't go
+ * from killed back to scaled directly without first reviving as
+ * 'testing'). The current status itself is excluded.
+ */
+export const CAMPAIGN_TRANSITIONS: Record<CampaignStatus, CampaignStatus[]> = {
+  testing: ['scaled', 'paused', 'killed'],
+  scaled: ['paused', 'killed'],
+  paused: ['testing', 'scaled', 'killed'],
+  killed: ['testing'],
+};

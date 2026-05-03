@@ -5,7 +5,8 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { ChevronDown, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from './StatusBadge';
+import { StatusMenu } from './StatusMenu';
+import { ConfirmDialog } from './ConfirmDialog';
 import { AdsetHealthDot } from './AdsetHealthDot';
 import { AdsetSummaryStrip } from './AdsetSummaryStrip';
 import { AdsetEntriesTable } from '@/components/tables/AdsetEntriesTable';
@@ -16,7 +17,12 @@ import { computeAdsetTotals, type DateRange } from '@/lib/metrics/adsetTotals';
 import { adsetHealth } from '@/lib/utils/adset-health';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { getBrowserTimezone } from '@/lib/utils/date';
-import type { Adset, AdsetInput } from '@/types/adset';
+import {
+  ADSET_TRANSITIONS,
+  type Adset,
+  type AdsetInput,
+  type AdsetStatus,
+} from '@/types/adset';
 
 interface AdsetAccordionProps {
   productId: string;
@@ -27,6 +33,7 @@ interface AdsetAccordionProps {
   range: DateRange;
   onConfirmDelete: (adsetId: string) => Promise<void> | void;
   onEdit: (adsetId: string, data: AdsetInput) => Promise<void>;
+  onStatusChange: (adsetId: string, status: AdsetStatus) => Promise<void>;
 }
 
 const PARAM = 'adsets';
@@ -39,6 +46,7 @@ export function AdsetAccordion({
   range,
   onConfirmDelete,
   onEdit,
+  onStatusChange,
 }: AdsetAccordionProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -76,6 +84,7 @@ export function AdsetAccordion({
           onOpenChange={(o) => setOpen(adset.id, o)}
           onDelete={onConfirmDelete}
           onEdit={onEdit}
+          onStatusChange={onStatusChange}
         />
       ))}
     </div>
@@ -97,6 +106,7 @@ function AdsetItem({
   onOpenChange,
   onDelete,
   onEdit,
+  onStatusChange,
 }: {
   productId: string;
   campaignId: string;
@@ -107,8 +117,24 @@ function AdsetItem({
   onOpenChange: (open: boolean) => void;
   onDelete: (adsetId: string) => Promise<void> | void;
   onEdit: (adsetId: string, data: AdsetInput) => Promise<void>;
+  onStatusChange: (adsetId: string, status: AdsetStatus) => Promise<void>;
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [pendingKill, setPendingKill] = useState<AdsetStatus | null>(null);
+
+  const handleStatusChange = async (next: AdsetStatus) => {
+    if (next === 'killed') {
+      setPendingKill(next);
+      return;
+    }
+    await onStatusChange(adset.id, next);
+  };
+
+  const handleConfirmKill = async () => {
+    if (!pendingKill) return;
+    await onStatusChange(adset.id, pendingKill);
+    setPendingKill(null);
+  };
 
   // Always-fetched so the totals + health dot are accurate even when the
   // accordion is collapsed. Live snapshot from Firestore.
@@ -150,7 +176,11 @@ function AdsetItem({
               <AdsetHealthDot health={health} />
               <span className="truncate text-subheading text-text">{adset.name}</span>
               <Badge variant="outline">{adset.funnelStage}</Badge>
-              <StatusBadge status={adset.status} />
+              <StatusMenu
+                status={adset.status}
+                options={ADSET_TRANSITIONS[adset.status]}
+                onChange={handleStatusChange}
+              />
               <span className="text-caption text-text-muted">
                 {adset.budget && adset.budget > 0
                   ? `Budget ${formatCurrency(adset.budget)}/day`
@@ -209,6 +239,15 @@ function AdsetItem({
         productName={productName}
         adset={adset}
         onSubmit={(data) => onEdit(adset.id, data)}
+      />
+
+      <ConfirmDialog
+        open={pendingKill !== null}
+        onOpenChange={(o) => !o && setPendingKill(null)}
+        title="Kill this adset?"
+        description="Status changes to killed. You can revert later — this does not delete data."
+        confirmLabel="Kill"
+        onConfirm={handleConfirmKill}
       />
     </div>
   );

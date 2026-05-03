@@ -6,7 +6,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from './ConfirmDialog';
-import { StatusBadge } from './StatusBadge';
+import { StatusMenu } from './StatusMenu';
 import { VerdictBadge } from '@/components/verdict/VerdictBadge';
 import { EditCampaignDialog } from '@/components/forms/EditCampaignDialog';
 import { useCampaignEntries } from '@/hooks/useCampaignEntries';
@@ -15,7 +15,12 @@ import { useAllAdsetEntries } from '@/hooks/useAllAdsetEntries';
 import { useVerdict } from '@/hooks/useVerdict';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { cpaTone, profitTone, TONE_TEXT_CLASS } from '@/lib/utils/threshold-color';
-import type { Campaign, CampaignInput } from '@/types/campaign';
+import {
+  CAMPAIGN_TRANSITIONS,
+  type Campaign,
+  type CampaignInput,
+  type CampaignStatus,
+} from '@/types/campaign';
 
 interface CampaignCardProps {
   productId: string;
@@ -23,6 +28,7 @@ interface CampaignCardProps {
   targetCPA: number;
   onDelete: (id: string) => Promise<void> | void;
   onEdit: (id: string, data: CampaignInput) => Promise<void>;
+  onStatusChange: (id: string, status: CampaignStatus) => Promise<void>;
 }
 
 const ALL_TIME = { from: null as string | null, to: '2099-12-31' };
@@ -33,9 +39,25 @@ export function CampaignCard({
   targetCPA,
   onDelete,
   onEdit,
+  onStatusChange,
 }: CampaignCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [pendingKill, setPendingKill] = useState<CampaignStatus | null>(null);
+
+  const handleStatusChange = async (next: CampaignStatus) => {
+    if (next === 'killed') {
+      setPendingKill(next);
+      return;
+    }
+    await onStatusChange(campaign.id, next);
+  };
+
+  const handleConfirmKill = async () => {
+    if (!pendingKill) return;
+    await onStatusChange(campaign.id, pendingKill);
+    setPendingKill(null);
+  };
 
   const { data: entries } = useCampaignEntries(productId, campaign.id);
   const { data: adsets } = useAdsets(productId, campaign.id);
@@ -64,7 +86,11 @@ export function CampaignCard({
       >
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-subheading text-text">{campaign.name}</p>
-          <StatusBadge status={campaign.status} />
+          <StatusMenu
+            status={campaign.status}
+            options={CAMPAIGN_TRANSITIONS[campaign.status]}
+            onChange={handleStatusChange}
+          />
           <VerdictBadge verdict={result.verdict} size="sm" />
         </div>
 
@@ -119,6 +145,15 @@ export function CampaignCard({
         title={`Delete "${campaign.name}"?`}
         description="This will permanently delete the campaign, its adsets, and every daily entry under it."
         onConfirm={() => onDelete(campaign.id)}
+      />
+
+      <ConfirmDialog
+        open={pendingKill !== null}
+        onOpenChange={(o) => !o && setPendingKill(null)}
+        title="Kill this campaign?"
+        description="Status changes to killed. You can revert later — this does not delete data."
+        confirmLabel="Kill"
+        onConfirm={handleConfirmKill}
       />
 
       <EditCampaignDialog

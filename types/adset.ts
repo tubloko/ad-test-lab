@@ -27,3 +27,10 @@ export type AdsetInput = z.infer<typeof AdsetInputSchema>;
 export type AdsetStatus = z.infer<typeof AdsetStatusSchema>;
 export type FunnelStage = z.infer<typeof FunnelStageSchema>;
 export type Adset = z.infer<typeof AdsetSchema>;
+
+/** Forward transitions for the inline status menu — current status excluded. */
+export const ADSET_TRANSITIONS: Record<AdsetStatus, AdsetStatus[]> = {
+  active: ['paused', 'killed'],
+  paused: ['active', 'killed'],
+  killed: ['active'],
+};

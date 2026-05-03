@@ -21,7 +21,7 @@ import {
   deleteCampaign,
   updateCampaign,
 } from '@/lib/firebase/campaigns';
-import type { CampaignInput } from '@/types/campaign';
+import type { CampaignInput, CampaignStatus } from '@/types/campaign';
 
 interface ProductDetailProps {
   productId: string;
@@ -84,6 +84,14 @@ export function ProductDetail({ productId }: ProductDetailProps) {
     await updateCampaign(user.uid, productId, campaignId, data);
   };
 
+  const handleCampaignStatusChange = async (
+    campaignId: string,
+    status: CampaignStatus,
+  ) => {
+    if (!user) return;
+    await updateCampaign(user.uid, productId, campaignId, { status });
+  };
+
   return (
     <section className="mx-auto w-full max-w-6xl space-y-8">
       <ProductHeader product={product} onDeleteClick={() => setConfirmOpen(true)} />
@@ -132,6 +140,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
                 targetCPA={product.targetCPA}
                 onDelete={handleDeleteCampaign}
                 onEdit={handleEditCampaign}
+                onStatusChange={handleCampaignStatusChange}
               />
             ))}
           </div>

@@ -62,7 +62,7 @@ export function ConfirmDialog({
             onClick={handleConfirm}
             disabled={busy}
           >
-            {busy ? 'Deleting…' : confirmLabel}
+            {busy ? 'Working…' : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

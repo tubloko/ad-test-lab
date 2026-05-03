@@ -17,7 +17,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
-import { StatusBadge } from '@/components/StatusBadge';
+import { StatusMenu } from '@/components/StatusMenu';
 import { StickyVerdictBar } from '@/components/verdict/StickyVerdictBar';
 import { CampaignEntriesTable } from '@/components/tables/CampaignEntriesTable';
 import { AdsetAccordion } from '@/components/AdsetAccordion';
@@ -28,8 +28,12 @@ import { CPATrendChart } from '@/components/charts/CPATrendChart';
 import { AdsetTrendChart } from '@/components/charts/AdsetTrendChart';
 import { deleteCampaign, updateCampaign } from '@/lib/firebase/campaigns';
 import { createAdset, deleteAdset, updateAdset } from '@/lib/firebase/adsets';
-import type { AdsetInput } from '@/types/adset';
-import type { CampaignInput } from '@/types/campaign';
+import type { AdsetInput, AdsetStatus } from '@/types/adset';
+import {
+  CAMPAIGN_TRANSITIONS,
+  type CampaignInput,
+  type CampaignStatus,
+} from '@/types/campaign';
 import { rangeStartDate } from '@/lib/utils/dateRange';
 import { todayInTimezone, getBrowserTimezone } from '@/lib/utils/date';
 
@@ -72,6 +76,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [newAdsetOpen, setNewAdsetOpen] = useState(false);
   const [editCampaignOpen, setEditCampaignOpen] = useState(false);
+  const [pendingKill, setPendingKill] = useState<CampaignStatus | null>(null);
 
   if (loading) {
     return (
@@ -125,9 +130,29 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
     await updateAdset(user.uid, productId, campaignId, adsetId, data);
   };
 
+  const handleAdsetStatusChange = async (adsetId: string, status: AdsetStatus) => {
+    if (!user) return;
+    await updateAdset(user.uid, productId, campaignId, adsetId, { status });
+  };
+
   const handleEditCampaign = async (data: CampaignInput) => {
     if (!user) return;
     await updateCampaign(user.uid, productId, campaignId, data);
+  };
+
+  const handleStatusChange = async (next: CampaignStatus) => {
+    if (!user) return;
+    if (next === 'killed') {
+      setPendingKill(next);
+      return;
+    }
+    await updateCampaign(user.uid, productId, campaignId, { status: next });
+  };
+
+  const handleConfirmKill = async () => {
+    if (!user || !pendingKill) return;
+    await updateCampaign(user.uid, productId, campaignId, { status: pendingKill });
+    setPendingKill(null);
   };
 
   const hasAnyData = entries.length > 0 || adsetIds.some((id) => (byAdsetId[id]?.length ?? 0) > 0);
@@ -154,7 +179,11 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-heading text-text">{campaign.name}</h1>
-            <StatusBadge status={campaign.status} />
+            <StatusMenu
+              status={campaign.status}
+              options={CAMPAIGN_TRANSITIONS[campaign.status]}
+              onChange={handleStatusChange}
+            />
           </div>
           {campaign.notes && (
             <p className="max-w-prose text-body text-text-muted">{campaign.notes}</p>
@@ -244,6 +273,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
             range={range}
             onConfirmDelete={handleDeleteAdset}
             onEdit={handleEditAdset}
+            onStatusChange={handleAdsetStatusChange}
           />
         )}
       </section>
@@ -271,6 +301,15 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         title={`Delete "${campaign.name}"?`}
         description="This will permanently delete the campaign, its adsets, and every daily entry."
         onConfirm={handleDeleteCampaign}
+      />
+
+      <ConfirmDialog
+        open={pendingKill !== null}
+        onOpenChange={(o) => !o && setPendingKill(null)}
+        title="Kill this campaign?"
+        description="Status changes to killed. You can revert later — this does not delete data."
+        confirmLabel="Kill"
+        onConfirm={handleConfirmKill}
       />
 
       <NewAdsetDialog
