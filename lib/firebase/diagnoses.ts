@@ -5,7 +5,12 @@ import { paths } from './paths';
 import { toDiagnosis } from './converters';
 import type { Diagnosis } from '@/types/diagnosis';
 
-const TTL_MS = 24 * 60 * 60 * 1000;
+// Diagnoses are keyed by a hash over the inputs that drive the
+// diagnosis. Same inputs always return the same cached doc so the user
+// isn't billed twice for the same question; any change to the inputs
+// produces a new hash and a fresh run. The expiresAt field is kept for
+// historical/admin use (e.g. retention sweeps) but no longer gates reads.
+const RECORD_RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
 
 export interface CacheDiagnosisInput {
   productId: string;
@@ -35,21 +40,27 @@ export async function getCachedDiagnosis(
   const snap = await ref.where('inputHash', '==', inputHash).get();
   if (snap.empty) return null;
 
-  const now = Date.now();
-  for (const docSnap of snap.docs) {
-    const data = docSnap.data();
-    const expiresMs =
-      data.expiresAt instanceof Timestamp ? data.expiresAt.toMillis() : 0;
-    if (expiresMs > now) {
-      return toDiagnosis({
-        id: docSnap.id,
-        ...data,
-        createdAt: asDate(data.createdAt),
-        expiresAt: asDate(data.expiresAt),
-      });
-    }
-  }
-  return null;
+  // If multiple docs match the same hash (shouldn't happen normally),
+  // prefer the most recently generated one.
+  const docs = snap.docs.slice().sort((a, b) => {
+    const ta =
+      a.data().createdAt instanceof Timestamp
+        ? (a.data().createdAt as Timestamp).toMillis()
+        : 0;
+    const tb =
+      b.data().createdAt instanceof Timestamp
+        ? (b.data().createdAt as Timestamp).toMillis()
+        : 0;
+    return tb - ta;
+  });
+  const docSnap = docs[0];
+  const data = docSnap.data();
+  return toDiagnosis({
+    id: docSnap.id,
+    ...data,
+    createdAt: asDate(data.createdAt),
+    expiresAt: asDate(data.expiresAt),
+  });
 }
 
 export async function cacheDiagnosis(
@@ -60,7 +71,7 @@ export async function cacheDiagnosis(
     paths.diagnoses(uid, input.productId, input.campaignId),
   );
   const now = Date.now();
-  const expiresAt = Timestamp.fromMillis(now + TTL_MS);
+  const expiresAt = Timestamp.fromMillis(now + RECORD_RETENTION_MS);
   const createdAt = Timestamp.fromMillis(now);
   const docRef = await ref.add({
     ...input,

@@ -135,7 +135,14 @@ export async function POST(req: NextRequest) {
   const { productId, campaignId, dateRange, input, ruleResult } = body;
 
   // 3. Cache check
-  const inputHash = hashInput({ input, dateRange });
+  // Hash everything that the diagnosis output legitimately depends on:
+  // raw inputs, the date window, and the per-adset breakdown the prompt
+  // sees. Anything else changing (campaign name, etc.) is cosmetic.
+  const inputHash = hashInput({
+    input,
+    dateRange,
+    adsetBreakdown: body.adsetBreakdown ?? null,
+  });
   try {
     const cached = await getCachedDiagnosis(uid, productId, campaignId, inputHash);
     if (cached) {

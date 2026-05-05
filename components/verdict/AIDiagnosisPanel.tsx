@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Sparkles, AlertTriangle, RotateCw, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -55,14 +55,6 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
     if (res?.cached) toast.success('Showing cached analysis from earlier');
     else if (res) toast.success('Diagnosis ready');
   };
-
-  const refreshIn = useMemo(() => {
-    if (!diagnosis) return null;
-    const ms = diagnosis.expiresAt.getTime() - Date.now();
-    if (ms <= 0) return null;
-    const hours = Math.max(1, Math.round(ms / (60 * 60 * 1000)));
-    return hours;
-  }, [diagnosis]);
 
   const isBudgetBlocked = error?.kind === 'budget_exceeded';
   const showResult = status === 'success' && diagnosis;
@@ -128,7 +120,6 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
             </span>
             <p className="text-caption text-text-subtle">
               Generated {formatDate(diagnosis.createdAt)}
-              {refreshIn !== null && ` · refresh available in ${refreshIn}h`}
             </p>
           </div>
         </div>
