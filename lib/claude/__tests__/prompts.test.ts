@@ -49,6 +49,25 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT).toMatch(/"recommendedAction"/);
     expect(SYSTEM_PROMPT).toMatch(/"confidence"/);
   });
+
+  it('teaches the message-creative-LP MISMATCH concept explicitly', () => {
+    expect(SYSTEM_PROMPT).toMatch(/MISMATCH/);
+  });
+
+  it('lists ANTI-PATTERNS to avoid', () => {
+    expect(SYSTEM_PROMPT).toMatch(/ANTI-PATTERNS/);
+  });
+
+  it('places the JSON schema at the end of the prompt', () => {
+    // The schema block is what the model reads last and follows when
+    // emitting output — keep it as the closing instruction.
+    const trimmed = SYSTEM_PROMPT.trimEnd();
+    const schemaIdx = trimmed.lastIndexOf('"confidence"');
+    expect(schemaIdx).toBeGreaterThan(0);
+    // Nothing of substance should come after the schema closes.
+    const tail = trimmed.slice(schemaIdx);
+    expect(tail).toMatch(/}$/);
+  });
 });
 
 describe('buildDiagnosisPrompt', () => {
