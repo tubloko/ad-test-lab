@@ -40,26 +40,35 @@ export async function getCachedDiagnosis(
   const snap = await ref.where('inputHash', '==', inputHash).get();
   if (snap.empty) return null;
 
-  // If multiple docs match the same hash (shouldn't happen normally),
-  // prefer the most recently generated one.
-  const docs = snap.docs.slice().sort((a, b) => {
-    const ta =
-      a.data().createdAt instanceof Timestamp
-        ? (a.data().createdAt as Timestamp).toMillis()
-        : 0;
-    const tb =
-      b.data().createdAt instanceof Timestamp
-        ? (b.data().createdAt as Timestamp).toMillis()
-        : 0;
-    return tb - ta;
-  });
-  const docSnap = docs[0];
-  const data = docSnap.data();
+  // Same-hash docs may exist if cache TTL is shorter than retention.
+  // Prefer the most recent one whose expiresAt is still in the future —
+  // that's the cache-eligible one. Older expired docs stay around as
+  // history but aren't reused for new requests.
+  const now = Date.now();
+  const candidates = snap.docs
+    .map((d) => ({
+      doc: d,
+      data: d.data(),
+      createdMs:
+        d.data().createdAt instanceof Timestamp
+          ? (d.data().createdAt as Timestamp).toMillis()
+          : 0,
+      expiresMs:
+        d.data().expiresAt instanceof Timestamp
+          ? (d.data().expiresAt as Timestamp).toMillis()
+          : 0,
+    }))
+    .filter((c) => c.expiresMs > now)
+    .sort((a, b) => b.createdMs - a.createdMs);
+
+  if (candidates.length === 0) return null;
+
+  const top = candidates[0];
   return toDiagnosis({
-    id: docSnap.id,
-    ...data,
-    createdAt: asDate(data.createdAt),
-    expiresAt: asDate(data.expiresAt),
+    id: top.doc.id,
+    ...top.data,
+    createdAt: asDate(top.data.createdAt),
+    expiresAt: asDate(top.data.expiresAt),
   });
 }
 

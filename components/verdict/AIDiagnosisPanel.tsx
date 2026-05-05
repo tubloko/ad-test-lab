@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sparkles, AlertTriangle, RotateCw, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDiagnose } from '@/hooks/useDiagnose';
-import type { Diagnosis } from '@/types/diagnosis';
+import { useCampaignDiagnoses } from '@/hooks/useCampaignDiagnoses';
+import { hashInputClient } from '@/lib/utils/hashClient';
+import { DiagnosisFullView } from './DiagnosisFullView';
+import { PreviousDiagnosesList } from './PreviousDiagnosesList';
 import type { VerdictInput, VerdictResult } from '@/lib/verdict-engine';
 import type { ProfitBreakdown } from '@/lib/metrics/profitWithFees';
 import type { AdsetSummary } from '@/lib/claude/prompts';
-import { formatDate } from '@/lib/utils/formatDate';
 
 interface AIDiagnosisPanelProps {
   productId: string;
@@ -23,24 +26,48 @@ interface AIDiagnosisPanelProps {
   adsetBreakdown?: AdsetSummary[];
 }
 
-const CONFIDENCE_TONE: Record<Diagnosis['confidence'], string> = {
-  low: 'bg-info-bg/10 text-info-text border-info-border/40',
-  medium: 'bg-warning-bg/10 text-warning-text border-warning-border/40',
-  high: 'bg-success-bg/10 text-success-text border-success-border/40',
-};
-
 export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
-  const { diagnose, loading, error, diagnosis, status } = useDiagnose();
-  const [hasAttempted, setHasAttempted] = useState(false);
+  const { data: diagnoses, loading: loadingDiagnoses } = useCampaignDiagnoses(
+    props.productId,
+    props.campaignId,
+  );
+  const { diagnose, loading: generating, error } = useDiagnose();
+  const [currentInputHash, setCurrentInputHash] = useState<string | null>(null);
 
   const fromDate = props.dateRange.from;
 
-  const onClick = async () => {
+  // Hash the same shape the server uses (see app/api/diagnose/route.ts).
+  // SubtleCrypto is async; setState lands in the .then microtask, not
+  // synchronously in the effect body — so it doesn't trigger the
+  // set-state-in-effect lint.
+  useEffect(() => {
+    if (!fromDate) return;
+    let cancelled = false;
+    const adsetBreakdown = props.adsetBreakdown ?? null;
+    void hashInputClient({
+      input: props.input,
+      dateRange: { from: fromDate, to: props.dateRange.to },
+      adsetBreakdown,
+    }).then((hash) => {
+      if (!cancelled) setCurrentInputHash(hash);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromDate, props.dateRange.to, props.input, props.adsetBreakdown]);
+
+  const latest = diagnoses[0] ?? null;
+  const previous = diagnoses.slice(1);
+  const dataDrifted =
+    latest !== null &&
+    currentInputHash !== null &&
+    latest.inputHash !== currentInputHash;
+
+  const onGenerate = async () => {
     if (!fromDate) {
       toast.error('Pick a date range with at least one day of data first.');
       return;
     }
-    setHasAttempted(true);
     const res = await diagnose({
       productId: props.productId,
       campaignId: props.campaignId,
@@ -54,11 +81,12 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
     });
     if (res?.cached) toast.success('Showing cached analysis from earlier');
     else if (res) toast.success('Diagnosis ready');
+    // useCampaignDiagnoses listens via onSnapshot — the new doc appears
+    // automatically, no manual refetch needed.
   };
 
   const isBudgetBlocked = error?.kind === 'budget_exceeded';
-  const showResult = status === 'success' && diagnosis;
-  const showError = status === 'error' && !isBudgetBlocked;
+  const showError = error !== null && !isBudgetBlocked;
 
   return (
     <section className="rounded-lg border border-border bg-surface p-6 space-y-4">
@@ -73,9 +101,9 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
           </p>
         </div>
 
-        {!showResult && !isBudgetBlocked && (
-          <Button type="button" size="sm" onClick={onClick} disabled={loading}>
-            {loading ? (
+        {!loadingDiagnoses && !latest && !isBudgetBlocked && (
+          <Button type="button" size="sm" onClick={onGenerate} disabled={generating}>
+            {generating ? (
               <>
                 <RotateCw className="size-4 animate-spin" />
                 Analyzing…
@@ -90,38 +118,56 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
         )}
       </header>
 
-      {!hasAttempted && status === 'idle' && (
+      {loadingDiagnoses && (
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+        </div>
+      )}
+
+      {!loadingDiagnoses && !latest && !showError && !isBudgetBlocked && (
         <p className="text-caption text-text-subtle">
           The rule engine already gave you a verdict. Claude can add narrative context — what the
           numbers most likely mean and what to do next.
         </p>
       )}
 
-      {showResult && diagnosis && (
+      {!loadingDiagnoses && latest && (
         <div className="space-y-4">
-          <p className="text-body text-text">{diagnosis.aiSummary}</p>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <p className="text-caption font-medium text-text-muted">Primary issue</p>
-              <p className="text-body text-text">{diagnosis.primaryIssue}</p>
+          {dataDrifted && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning-border/40 bg-warning-bg/10 px-3 py-2">
+              <p className="text-caption text-warning-text">
+                Data has changed since this diagnosis was generated.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onGenerate}
+                disabled={generating}
+              >
+                {generating ? (
+                  <>
+                    <RotateCw className="size-4 animate-spin" />
+                    Refreshing…
+                  </>
+                ) : (
+                  <>
+                    <RotateCw className="size-4" />
+                    Refresh diagnosis
+                  </>
+                )}
+              </Button>
             </div>
-            <div className="space-y-1">
-              <p className="text-caption font-medium text-text-muted">Recommended action</p>
-              <p className="text-body text-text">{diagnosis.recommendedAction}</p>
-            </div>
-          </div>
+          )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-subtle">
-            <span
-              className={`inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-caption font-medium ${CONFIDENCE_TONE[diagnosis.confidence]}`}
-            >
-              {confidenceLabel(diagnosis.confidence)} confidence
-            </span>
-            <p className="text-caption text-text-subtle">
-              Generated {formatDate(diagnosis.createdAt)}
-            </p>
-          </div>
+          <DiagnosisFullView diagnosis={latest} />
+
+          <PreviousDiagnosesList
+            diagnoses={previous}
+            currentInputHash={currentInputHash}
+          />
         </div>
       )}
 
@@ -138,7 +184,13 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
               )}
             </div>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={onClick} disabled={loading}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onGenerate}
+            disabled={generating}
+          >
             <RotateCw className="size-4" />
             Try again
           </Button>
@@ -160,8 +212,4 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
       )}
     </section>
   );
-}
-
-function confidenceLabel(c: Diagnosis['confidence']): string {
-  return c.charAt(0).toUpperCase() + c.slice(1);
 }
