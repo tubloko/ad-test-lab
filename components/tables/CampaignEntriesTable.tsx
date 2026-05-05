@@ -18,7 +18,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { BackfillDialog } from '@/components/forms/BackfillDialog';
 import { CollapsibleEntriesTable } from '@/components/tables/CollapsibleEntriesTable';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
@@ -34,11 +33,7 @@ import {
   profitTone,
   TONE_TEXT_CLASS,
 } from '@/lib/utils/threshold-color';
-import {
-  rangeStartDate,
-  isWithinRange,
-  type DateRangePreset,
-} from '@/lib/utils/dateRange';
+import { isWithinRange } from '@/lib/utils/dateRange';
 import { cn } from '@/lib/utils';
 import type { EnrichedCampaignEntry } from '@/hooks/useCampaignEntries';
 import type { CampaignEntryInput } from '@/types/entry';
@@ -50,6 +45,8 @@ interface CampaignEntriesTableProps {
   adsetSpendByDate: Map<string, number>;
   targetCPA: number;
   timezone: string;
+  /** Inclusive lower bound (YYYY-MM-DD) for which historical rows show. `null` = no lower bound. */
+  fromDate: string | null;
   productFees?: ProductFees;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
@@ -107,14 +104,13 @@ export function CampaignEntriesTable({
   adsetSpendByDate,
   targetCPA,
   timezone,
+  fromDate,
   productFees,
   onSaveEntry,
   onDeleteEntry,
 }: CampaignEntriesTableProps) {
-  const [preset, setPreset] = useState<DateRangePreset>('14d');
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const today = todayInTimezone(timezone);
-  const fromDate = rangeStartDate(preset, today);
 
   const { expanded, setExpanded } = useExpandedTable(STORAGE_KEY);
 
@@ -271,10 +267,6 @@ export function CampaignEntriesTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <DateRangeSelect preset={preset} onPresetChange={setPreset} />
-      </div>
-
       <CollapsibleEntriesTable
         storageKey={STORAGE_KEY}
         historicalCount={historicalCount}

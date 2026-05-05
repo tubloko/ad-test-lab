@@ -16,6 +16,7 @@ import { useVerdict } from '@/hooks/useVerdict';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusMenu } from '@/components/StatusMenu';
 import { StickyVerdictBar } from '@/components/verdict/StickyVerdictBar';
@@ -37,7 +38,7 @@ import {
   type CampaignInput,
   type CampaignStatus,
 } from '@/types/campaign';
-import { rangeStartDate } from '@/lib/utils/dateRange';
+import { rangeStartDate, type DateRangePreset } from '@/lib/utils/dateRange';
 import { todayInTimezone, getBrowserTimezone } from '@/lib/utils/date';
 
 interface CampaignDetailProps {
@@ -64,8 +65,10 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
   );
 
   const { preset, setPreset } = useDateRangePreset('14d');
+  const [dailyPreset, setDailyPreset] = useState<DateRangePreset>('14d');
   const today = todayInTimezone(getBrowserTimezone());
   const fromDate = rangeStartDate(preset, today);
+  const dailyFromDate = rangeStartDate(dailyPreset, today);
   const range = useMemo(() => ({ from: fromDate, to: today }), [fromDate, today]);
 
   const targetCPA = product?.targetCPA ?? 0;
@@ -286,12 +289,16 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-subheading text-text">Daily entries</h2>
+        <div className="flex items-center gap-3">
+          <DateRangeSelect preset={dailyPreset} onPresetChange={setDailyPreset} />
+          <h2 className="text-subheading text-text">Daily entries</h2>
+        </div>
         <CampaignEntriesTable
           entries={entries}
           adsetSpendByDate={adsetSpendByDate}
           targetCPA={targetCPA}
           timezone={getBrowserTimezone()}
+          fromDate={dailyFromDate}
           productFees={fees}
           onSaveEntry={saveEntry}
           onDeleteEntry={deleteEntry}
