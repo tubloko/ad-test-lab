@@ -6,7 +6,13 @@ function stableStringify(value: unknown): string {
     return '[' + value.map(stableStringify).join(',') + ']';
   }
   const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
+  // Skip undefined-valued keys to match JSON.stringify, so a hash
+  // computed locally agrees with one computed after a JSON round-trip
+  // through the API. Without this, an optional field present-but-undefined
+  // on the client diverges from the same field absent on the server.
+  const keys = Object.keys(obj)
+    .filter((k) => obj[k] !== undefined)
+    .sort();
   return (
     '{' +
     keys.map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') +

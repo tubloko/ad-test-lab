@@ -11,7 +11,12 @@ function stableStringify(value: unknown): string {
     return '[' + value.map(stableStringify).join(',') + ']';
   }
   const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
+  // Skip undefined-valued keys to match JSON.stringify. The server hashes
+  // the body after JSON.parse, which has already dropped undefined fields;
+  // the client must do the same so the two digests agree.
+  const keys = Object.keys(obj)
+    .filter((k) => obj[k] !== undefined)
+    .sort();
   return (
     '{' +
     keys.map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') +
