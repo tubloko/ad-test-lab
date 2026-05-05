@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { toast } from 'sonner';
 import { auth } from '@/lib/firebase/config';
 import type { Diagnosis } from '@/types/diagnosis';
 import type { VerdictInput, VerdictResult } from '@/lib/verdict-engine';
@@ -15,6 +16,7 @@ export interface DiagnoseErrorKind {
     | 'daily_limit'
     | 'budget_exceeded'
     | 'upstream'
+    | 'timeout'
     | 'bad_request'
     | 'internal';
   message: string;
@@ -156,6 +158,14 @@ export function useDiagnose(): UseDiagnoseReturn {
             'upstream',
             payloadJson.message ?? 'AI service temporarily unavailable. Try again in a moment.',
           );
+          break;
+        case 504:
+          err = fallback(
+            'timeout',
+            payloadJson.message ??
+              'AI took too long. Try again — usually faster on retry.',
+          );
+          toast.error('AI took too long. Try again — usually faster on retry.');
           break;
         default:
           err = fallback('internal', payloadJson.message ?? 'Something went wrong. Try again.');

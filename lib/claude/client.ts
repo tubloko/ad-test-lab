@@ -7,6 +7,9 @@ if (!process.env.ANTHROPIC_API_KEY) {
 
 export const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  // Stay below the route's maxDuration so the SDK aborts cleanly before
+  // Vercel kills the function and we get a brutal 504 with no error body.
+  timeout: 50_000,
 });
 
 export const CLAUDE_MODEL = 'claude-sonnet-4-5';

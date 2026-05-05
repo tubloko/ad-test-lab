@@ -12,6 +12,10 @@ import {
 import { hashInput } from '@/lib/utils/hash';
 
 export const runtime = 'nodejs';
+// Claude Sonnet 4.5 with our long system prompt can take 10-30s. Vercel
+// Hobby's 10s default 504s us. 60s is the Hobby ceiling and is the cap
+// we want even on Pro — if a call is slower than 60s, retry beats waiting.
+export const maxDuration = 60;
 
 const VerdictTypeSchema = z.enum([
   'NEED_MORE_DATA',
@@ -199,17 +203,34 @@ export async function POST(req: NextRequest) {
       adsetBreakdown: body.adsetBreakdown,
     });
   } catch (err) {
+    const name = err instanceof Error ? err.name : '';
+    const message = err instanceof Error ? err.message : String(err);
+    const isTimeout =
+      name === 'APIConnectionTimeoutError' ||
+      /timeout|aborted/i.test(message);
     console.error('[diagnose] generation failed', {
       uid,
       productId,
       campaignId,
-      message: err instanceof Error ? err.message : String(err),
+      name,
+      message,
+      isTimeout,
     });
     // Refund the usage credit so the user isn't punished for an upstream failure.
     try {
       await decrementUsage(uid);
     } catch (decErr) {
       console.error('[diagnose] decrement after failure also failed', { uid, decErr });
+    }
+    if (isTimeout) {
+      return NextResponse.json(
+        {
+          error: 'timeout',
+          message:
+            'AI is thinking longer than usual. Try again — second attempt is often faster.',
+        },
+        { status: 504 },
+      );
     }
     return NextResponse.json(
       {
