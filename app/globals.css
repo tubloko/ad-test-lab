@@ -111,6 +111,9 @@
 
     --shadow-sm-value: 0 2px 4px rgb(0 0 0 / 0.3);
     --shadow-md-value: 0 8px 24px rgb(0 0 0 / 0.4);
+
+    --sidebar-rail-width: 56px;
+    --sidebar-expanded-width: 240px;
   }
 
   .light {

@@ -7,6 +7,7 @@ import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { Sidebar } from '@/components/Sidebar';
 import { signOutUser } from '@/lib/firebase/auth';
 import { useUser } from '@/hooks/useUser';
 import { useAuthBootstrap } from '@/hooks/useAuthBootstrap';
@@ -42,7 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.replace('/login');
   };
 
-  const navLinks = (
+  const mobileNavLinks = (
     <nav className="flex flex-col gap-1">
       <Link
         href="/"
@@ -59,7 +60,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </nav>
   );
 
-  const userMenu = (
+  const mobileUserMenu = (
     <div className="space-y-2">
       <div className="rounded-md bg-elevated px-3 py-2">
         <p className="truncate text-caption text-text">
@@ -100,28 +101,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {mobileOpen && (
         <div className="border-b border-border bg-surface p-4 md:hidden">
           <div className="space-y-4">
-            {navLinks}
-            {userMenu}
+            {mobileNavLinks}
+            {mobileUserMenu}
           </div>
         </div>
       )}
 
-      {/* Desktop sidebar — sticky so the user menu and sign-out stay
-          visible while the main column scrolls. */}
-      <aside className="hidden md:flex md:sticky md:top-0 md:h-svh w-56 shrink-0 flex-col justify-between border-r border-border bg-surface p-4">
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
-          <div className="flex items-center justify-between px-2">
-            <Link href="/" className="text-subheading font-semibold text-text">
-              AdTestLab
-            </Link>
-            <ThemeToggle />
-          </div>
-          {navLinks}
-        </div>
-        {userMenu}
-      </aside>
+      <Sidebar user={user} onSignOut={handleSignOut} />
 
-      <main className="flex-1 p-4 md:p-8">
+      <main className="min-w-0 flex-1 p-4 md:p-8">
         <div className="mx-auto w-full max-w-6xl">
           <Breadcrumbs />
         </div>

@@ -123,6 +123,9 @@ Never rounded-xl, rounded-2xl, rounded-3xl.
 <Input className="bg-surface border-border focus:border-primary text-text placeholder:text-text-subtle rounded-sm" />
 ```
 
+### Sidebar
+See `components/Sidebar.tsx`. Default rail 56px (`--sidebar-rail-width`), expanded 240px (`--sidebar-expanded-width`). Hover-expand to a floating panel when unpinned; click the pin button to lock it open in-flow. Touch devices stay in rail mode (no hover). Mobile (<768px) uses the drawer pattern in `app/(app)/layout.tsx`.
+
 ## Verdict color mapping (single source of truth)
 
 In lib/utils/verdict-colors.ts:
