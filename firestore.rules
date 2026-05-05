@@ -8,5 +8,11 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
+
+    // Server-only state (e.g. system/budget/months/{YYYY-MM}). Admin SDK
+    // bypasses rules; clients must never see or write this.
+    match /system/{document=**} {
+      allow read, write: if false;
+    }
   }
 }

@@ -1,13 +1,6 @@
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  serverTimestamp,
-  Timestamp,
-} from 'firebase/firestore';
-import { db } from './config';
+import 'server-only';
+import { Timestamp } from 'firebase-admin/firestore';
+import { adminDb } from './admin';
 import { paths } from './paths';
 import { toDiagnosis } from './converters';
 import type { Diagnosis } from '@/types/diagnosis';
@@ -26,25 +19,34 @@ export interface CacheDiagnosisInput {
   confidence: Diagnosis['confidence'];
 }
 
+function asDate(value: unknown): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date(0);
+}
+
 export async function getCachedDiagnosis(
   uid: string,
   productId: string,
   campaignId: string,
   inputHash: string,
 ): Promise<Diagnosis | null> {
-  const ref = collection(db, paths.diagnoses(uid, productId, campaignId));
-  const q = query(ref, where('inputHash', '==', inputHash));
-  const snap = await getDocs(q);
+  const ref = adminDb.collection(paths.diagnoses(uid, productId, campaignId));
+  const snap = await ref.where('inputHash', '==', inputHash).get();
   if (snap.empty) return null;
 
   const now = Date.now();
   for (const docSnap of snap.docs) {
     const data = docSnap.data();
-    const expiresAt = data.expiresAt;
     const expiresMs =
-      expiresAt instanceof Timestamp ? expiresAt.toMillis() : 0;
+      data.expiresAt instanceof Timestamp ? data.expiresAt.toMillis() : 0;
     if (expiresMs > now) {
-      return toDiagnosis({ id: docSnap.id, ...data });
+      return toDiagnosis({
+        id: docSnap.id,
+        ...data,
+        createdAt: asDate(data.createdAt),
+        expiresAt: asDate(data.expiresAt),
+      });
     }
   }
   return null;
@@ -53,16 +55,22 @@ export async function getCachedDiagnosis(
 export async function cacheDiagnosis(
   uid: string,
   input: CacheDiagnosisInput,
-): Promise<string> {
-  const ref = collection(
-    db,
+): Promise<Diagnosis> {
+  const ref = adminDb.collection(
     paths.diagnoses(uid, input.productId, input.campaignId),
   );
-  const expiresAt = Timestamp.fromMillis(Date.now() + TTL_MS);
-  const docRef = await addDoc(ref, {
+  const now = Date.now();
+  const expiresAt = Timestamp.fromMillis(now + TTL_MS);
+  const createdAt = Timestamp.fromMillis(now);
+  const docRef = await ref.add({
     ...input,
-    createdAt: serverTimestamp(),
+    createdAt,
     expiresAt,
   });
-  return docRef.id;
+  return toDiagnosis({
+    id: docRef.id,
+    ...input,
+    createdAt: createdAt.toDate(),
+    expiresAt: expiresAt.toDate(),
+  });
 }

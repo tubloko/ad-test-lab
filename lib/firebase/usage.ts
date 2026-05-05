@@ -50,3 +50,19 @@ export async function checkAndIncrementUsage(uid: string): Promise<UsageResult> 
     };
   });
 }
+
+export async function decrementUsage(uid: string): Promise<void> {
+  const userRef = adminDb.doc(paths.user(uid));
+
+  await adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    if (!snap.exists) return;
+    const data = snap.data() ?? {};
+    const tz = (data.timezone as string | undefined) ?? 'UTC';
+    const today = todayInTimezone(tz);
+    if (data.diagnosesResetDate !== today) return;
+    const used = Number(data.diagnosesUsedToday ?? 0);
+    const next = Math.max(0, used - 1);
+    tx.update(userRef, { diagnosesUsedToday: next });
+  });
+}

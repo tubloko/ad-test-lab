@@ -19,6 +19,9 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusMenu } from '@/components/StatusMenu';
 import { StickyVerdictBar } from '@/components/verdict/StickyVerdictBar';
+import { AIDiagnosisPanel } from '@/components/verdict/AIDiagnosisPanel';
+import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
+import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import { CampaignEntriesTable } from '@/components/tables/CampaignEntriesTable';
 import { AdsetAccordion } from '@/components/AdsetAccordion';
 import { NewAdsetDialog } from '@/components/forms/NewAdsetDialog';
@@ -172,6 +175,39 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
 
   const hasAnyData = entries.length > 0 || adsetIds.some((id) => (byAdsetId[id]?.length ?? 0) > 0);
 
+  const profitBreakdown = useMemo(
+    () =>
+      computeProfitWithFees({
+        revenue: input.totalRevenue,
+        spend: input.totalSpend,
+        cogs: input.totalCOGS,
+        orders: input.totalOrders,
+        transactionFeePercent: input.transactionFeePercent,
+        transactionFeeFixed: input.transactionFeeFixed,
+        shippingCost: input.shippingCost,
+        refundRate: input.refundRate,
+      }),
+    [input],
+  );
+
+  const adsetBreakdown = useMemo(
+    () =>
+      adsets
+        .map((a) => {
+          const entries = byAdsetId[a.id] ?? [];
+          const totals = computeAdsetTotals(entries, range);
+          if (!totals.hasData) return null;
+          return {
+            name: a.name,
+            spend: totals.totalSpend,
+            ctr: totals.ctrTracked ? totals.ctr : undefined,
+            atcRate: totals.totalLPV > 0 ? totals.atcRate : undefined,
+          };
+        })
+        .filter((a): a is NonNullable<typeof a> => a !== null),
+    [adsets, byAdsetId, range],
+  );
+
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6">
       <StickyVerdictBar
@@ -232,6 +268,20 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
           icon={ListTodo}
           title="No entries yet"
           description="Add today's numbers below — campaign entries auto-fill spend from adsets."
+        />
+      )}
+
+      {hasAnyData && (
+        <AIDiagnosisPanel
+          productId={productId}
+          campaignId={campaignId}
+          productName={product?.name ?? ''}
+          campaignName={campaign.name}
+          dateRange={range}
+          input={input}
+          ruleResult={result}
+          profitBreakdown={profitBreakdown}
+          adsetBreakdown={adsetBreakdown}
         />
       )}
 
