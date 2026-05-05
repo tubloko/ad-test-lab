@@ -24,6 +24,8 @@ import { useSidebarPin } from '@/hooks/useSidebarPin';
 import { usePointerCoarse } from '@/hooks/usePointerCoarse';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
+import { SidebarBmcLink } from '@/components/SidebarBmcLink';
+import { SidebarFeedbackButton } from '@/components/SidebarFeedbackButton';
 
 const HOVER_LEAVE_DELAY_MS = 300;
 
@@ -156,20 +158,26 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
             <SidebarHeader expanded={expanded} animate={animate} />
             <SidebarNav pathname={pathname} expanded={expanded} animate={animate} />
           </div>
-          <div className="flex flex-col gap-1 border-t border-border-subtle p-2">
-            <ThemeRow expanded={expanded} animate={animate} />
-            <PinButton
-              pinned={pinned}
-              expanded={expanded}
-              animate={animate}
-              onTogglePin={handleTogglePin}
-            />
-            <UserRow user={user} expanded={expanded} animate={animate} />
-            <SignOutButton
-              expanded={expanded}
-              animate={animate}
-              onSignOut={onSignOut}
-            />
+          <div className="border-t border-border-subtle">
+            <div className="flex flex-col gap-1 p-2">
+              <SidebarFeedbackButton expanded={expanded} animate={animate} />
+              <SidebarBmcLink expanded={expanded} animate={animate} />
+            </div>
+            <div className="flex flex-col gap-1 border-t border-border-subtle p-2">
+              <ThemeRow expanded={expanded} animate={animate} />
+              <PinButton
+                pinned={pinned}
+                expanded={expanded}
+                animate={animate}
+                onTogglePin={handleTogglePin}
+              />
+              <UserRow user={user} expanded={expanded} animate={animate} />
+              <SignOutButton
+                expanded={expanded}
+                animate={animate}
+                onSignOut={onSignOut}
+              />
+            </div>
           </div>
         </aside>
       </div>

@@ -14,5 +14,11 @@ service cloud.firestore {
     match /system/{document=**} {
       allow read, write: if false;
     }
+
+    // Feedback is written by the /api/feedback route via Admin SDK.
+    // Clients must never read or write this directly.
+    match /feedback/{document=**} {
+      allow read, write: if false;
+    }
   }
 }
