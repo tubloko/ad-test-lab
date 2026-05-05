@@ -138,7 +138,14 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
         <div className="rounded-md border border-danger-border/40 bg-danger-bg/10 p-4 space-y-3">
           <div className="flex items-start gap-2">
             <AlertTriangle className="size-4 mt-0.5 text-danger-text" />
-            <p className="text-caption text-danger-text">{error.message}</p>
+            <div className="space-y-1">
+              <p className="text-caption text-danger-text">{error.message}</p>
+              {error.detail && (
+                <p className="text-caption font-mono text-text-subtle break-all">
+                  {error.detail}
+                </p>
+              )}
+            </div>
           </div>
           <Button type="button" size="sm" variant="outline" onClick={onClick} disabled={loading}>
             <RotateCw className="size-4" />

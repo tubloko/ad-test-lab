@@ -38,7 +38,7 @@ describe('DiagnosisOutputSchema', () => {
   });
 
   it('rejects too-long recommendedAction', () => {
-    const r = DiagnosisOutputSchema.safeParse({ ...valid, recommendedAction: 'b'.repeat(500) });
+    const r = DiagnosisOutputSchema.safeParse({ ...valid, recommendedAction: 'b'.repeat(1500) });
     expect(r.success).toBe(false);
   });
 

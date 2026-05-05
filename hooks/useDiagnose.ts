@@ -20,6 +20,8 @@ export interface DiagnoseErrorKind {
     | 'bad_request'
     | 'internal';
   message: string;
+  /** Underlying server-side error name + truncated message, for debugging. */
+  detail?: string;
   used?: number;
   limit?: number;
 }
@@ -118,7 +120,13 @@ export function useDiagnose(): UseDiagnoseReturn {
       }
 
       // Map non-OK responses to friendly errors
-      let payloadJson: { error?: string; message?: string; used?: number; limit?: number } = {};
+      let payloadJson: {
+        error?: string;
+        message?: string;
+        detail?: string;
+        used?: number;
+        limit?: number;
+      } = {};
       try {
         payloadJson = await res.json();
       } catch {
@@ -126,7 +134,7 @@ export function useDiagnose(): UseDiagnoseReturn {
       }
 
       const fallback = (kind: DiagnoseErrorKind['kind'], message: string) =>
-        ({ kind, message }) as DiagnoseErrorKind;
+        ({ kind, message, detail: payloadJson.detail }) as DiagnoseErrorKind;
 
       let err: DiagnoseErrorKind;
       switch (res.status) {

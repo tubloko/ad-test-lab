@@ -236,6 +236,10 @@ export async function POST(req: NextRequest) {
       {
         error: 'upstream',
         message: 'AI service temporarily unavailable. Try again in a moment.',
+        // Surface the underlying error so the founder using this app
+        // doesn't have to dig through Vercel logs to diagnose. Truncated
+        // to keep response bodies bounded.
+        detail: name ? `${name}: ${message.slice(0, 500)}` : message.slice(0, 500),
       },
       { status: 502 },
     );
