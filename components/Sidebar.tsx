@@ -40,6 +40,7 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
   const [focused, setFocused] = useState(false);
   const [animate, setAnimate] = useState(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!mounted) return;
@@ -58,22 +59,26 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
   const expanded = pinned || (interactive && (hovering || focused));
   const floating = interactive && (hovering || focused);
 
-  const handleEnter = () => {
-    if (!interactive) return;
+  const cancelLeaveTimer = () => {
     if (leaveTimer.current) {
       clearTimeout(leaveTimer.current);
       leaveTimer.current = null;
     }
+  };
+
+  const handleEnter = () => {
+    cancelLeaveTimer();
     setHovering(true);
   };
 
   const handleLeave = () => {
-    if (!interactive) return;
+    cancelLeaveTimer();
     leaveTimer.current = setTimeout(() => setHovering(false), HOVER_LEAVE_DELAY_MS);
   };
 
   const handleFocusCapture = () => {
     if (!interactive) return;
+    cancelLeaveTimer();
     setFocused(true);
   };
 
@@ -82,6 +87,33 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
     setFocused(false);
   };
+
+  // While the floating panel is open, collapse on outside click and on Esc.
+  useEffect(() => {
+    if (!floating) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (t && containerRef.current?.contains(t)) return;
+      cancelLeaveTimer();
+      setHovering(false);
+      setFocused(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const active = document.activeElement;
+      if (!active || !containerRef.current?.contains(active)) return;
+      cancelLeaveTimer();
+      setHovering(false);
+      setFocused(false);
+      (active as HTMLElement).blur();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [floating]);
 
   const handleTogglePin = () => {
     // When unpinning via a click inside the sidebar, the cursor is still over
@@ -94,6 +126,7 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
   return (
     <TooltipProvider delay={500}>
       <div
+        ref={containerRef}
         className={cn(
           'relative hidden shrink-0 md:block',
           animate && 'transition-[width] duration-200 ease-out'
@@ -103,20 +136,21 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
             ? 'var(--sidebar-expanded-width)'
             : 'var(--sidebar-rail-width)',
         }}
+        onMouseEnter={interactive ? handleEnter : undefined}
+        onMouseLeave={interactive ? handleLeave : undefined}
+        onFocusCapture={handleFocusCapture}
+        onBlurCapture={handleBlurCapture}
       >
         <aside
           className={cn(
-            'top-0 flex h-svh flex-col justify-between border-r border-border-subtle bg-surface',
+            'top-0 left-0 flex h-svh flex-col justify-between border-r border-border-subtle bg-surface',
             animate && 'transition-[width] duration-200 ease-out',
-            floating ? 'absolute left-0 z-30 shadow-md' : 'sticky',
+            pinned ? 'sticky' : 'fixed z-40',
+            floating && 'shadow-md',
             expanded
               ? 'w-[var(--sidebar-expanded-width)]'
               : 'w-[var(--sidebar-rail-width)]'
           )}
-          onMouseEnter={handleEnter}
-          onMouseLeave={handleLeave}
-          onFocusCapture={handleFocusCapture}
-          onBlurCapture={handleBlurCapture}
         >
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <SidebarHeader expanded={expanded} animate={animate} />
