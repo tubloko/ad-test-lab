@@ -11,7 +11,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { BackfillDialog } from '@/components/forms/BackfillDialog';
 import { CollapsibleEntriesTable } from '@/components/tables/CollapsibleEntriesTable';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
@@ -31,11 +30,7 @@ import {
   HEALTHY_CONV_FROM_LPV,
   TONE_TEXT_CLASS,
 } from '@/lib/utils/threshold-color';
-import {
-  rangeStartDate,
-  isWithinRange,
-  type DateRangePreset,
-} from '@/lib/utils/dateRange';
+import { isWithinRange } from '@/lib/utils/dateRange';
 import { cn } from '@/lib/utils';
 import type { AdsetEntry, AdsetEntryInput } from '@/types/entry';
 
@@ -43,6 +38,8 @@ interface AdsetEntriesTableProps {
   adsetId: string;
   entries: AdsetEntry[];
   timezone: string;
+  /** Inclusive lower bound (YYYY-MM-DD) for which historical rows show. `null` = no lower bound. */
+  fromDate: string | null;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
 }
@@ -99,14 +96,13 @@ export function AdsetEntriesTable({
   adsetId,
   entries,
   timezone,
+  fromDate,
   onSaveEntry,
   onDeleteEntry,
 }: AdsetEntriesTableProps) {
   const storageKey = `adset-${adsetId}-entries`;
-  const [preset, setPreset] = useState<DateRangePreset>('14d');
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const today = todayInTimezone(timezone);
-  const fromDate = rangeStartDate(preset, today);
 
   const { expanded, setExpanded } = useExpandedTable(storageKey);
 
@@ -241,10 +237,6 @@ export function AdsetEntriesTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <DateRangeSelect preset={preset} onPresetChange={setPreset} />
-      </div>
-
       <CollapsibleEntriesTable
         storageKey={storageKey}
         historicalCount={historicalCount}

@@ -329,7 +329,6 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
             campaignId={campaignId}
             productName={product?.name ?? ''}
             adsets={adsets}
-            range={range}
             onConfirmDelete={handleDeleteAdset}
             onEdit={handleEditAdset}
             onStatusChange={handleAdsetStatusChange}

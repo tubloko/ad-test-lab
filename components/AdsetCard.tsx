@@ -8,14 +8,16 @@ import { StatusMenu } from './StatusMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AdsetHealthDot } from './AdsetHealthDot';
 import { AdsetSummaryStrip } from './AdsetSummaryStrip';
+import { DateRangeSelect } from './DateRangeSelect';
 import { AdsetEntriesTable } from '@/components/tables/AdsetEntriesTable';
 import { EditAdsetDialog } from '@/components/forms/EditAdsetDialog';
 import { useAdsetEntries } from '@/hooks/useAdsetEntries';
 import { useAdsetEntryMutations } from '@/hooks/useAdsetEntryMutations';
-import { computeAdsetTotals, type DateRange } from '@/lib/metrics/adsetTotals';
+import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import { adsetHealth } from '@/lib/utils/adset-health';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
-import { getBrowserTimezone } from '@/lib/utils/date';
+import { getBrowserTimezone, todayInTimezone } from '@/lib/utils/date';
+import { rangeStartDate, type DateRangePreset } from '@/lib/utils/dateRange';
 import {
   ADSET_TRANSITIONS,
   type Adset,
@@ -28,8 +30,6 @@ interface AdsetCardListProps {
   campaignId: string;
   productName: string;
   adsets: Adset[];
-  /** Date range used for totals + health on every adset summary. */
-  range: DateRange;
   onConfirmDelete: (adsetId: string) => Promise<void> | void;
   onEdit: (adsetId: string, data: AdsetInput) => Promise<void>;
   onStatusChange: (adsetId: string, status: AdsetStatus) => Promise<void>;
@@ -40,7 +40,6 @@ export function AdsetCardList({
   campaignId,
   productName,
   adsets,
-  range,
   onConfirmDelete,
   onEdit,
   onStatusChange,
@@ -56,7 +55,6 @@ export function AdsetCardList({
           campaignId={campaignId}
           productName={productName}
           adset={adset}
-          range={range}
           onDelete={onConfirmDelete}
           onEdit={onEdit}
           onStatusChange={onStatusChange}
@@ -71,7 +69,6 @@ interface AdsetCardProps {
   campaignId: string;
   productName: string;
   adset: Adset;
-  range: DateRange;
   onDelete: (adsetId: string) => Promise<void> | void;
   onEdit: (adsetId: string, data: AdsetInput) => Promise<void>;
   onStatusChange: (adsetId: string, status: AdsetStatus) => Promise<void>;
@@ -82,13 +79,17 @@ function AdsetCard({
   campaignId,
   productName,
   adset,
-  range,
   onDelete,
   onEdit,
   onStatusChange,
 }: AdsetCardProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [pendingKill, setPendingKill] = useState<AdsetStatus | null>(null);
+  const [preset, setPreset] = useState<DateRangePreset>('14d');
+  const timezone = getBrowserTimezone();
+  const today = todayInTimezone(timezone);
+  const fromDate = rangeStartDate(preset, today);
+  const range = useMemo(() => ({ from: fromDate, to: today }), [fromDate, today]);
 
   const handleStatusChange = async (next: AdsetStatus) => {
     if (next === 'killed') {
@@ -145,7 +146,8 @@ function AdsetCard({
             </span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-2">
+            <DateRangeSelect preset={preset} onPresetChange={setPreset} />
             <Button
               type="button"
               variant="ghost"
@@ -176,7 +178,8 @@ function AdsetCard({
         <AdsetEntriesTable
           adsetId={adset.id}
           entries={entries}
-          timezone={getBrowserTimezone()}
+          timezone={timezone}
+          fromDate={fromDate}
           onSaveEntry={saveEntry}
           onDeleteEntry={deleteEntry}
         />
