@@ -2,20 +2,27 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, LogOut, Pin, PinOff, User as UserIcon } from 'lucide-react';
+import {
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  Pin,
+  PinOff,
+  Sun,
+  User as UserIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { User } from 'firebase/auth';
-import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { useSidebarPin } from '@/hooks/useSidebarPin';
 import { usePointerCoarse } from '@/hooks/usePointerCoarse';
+import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 const HOVER_LEAVE_DELAY_MS = 300;
@@ -115,15 +122,16 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
             <SidebarHeader expanded={expanded} animate={animate} />
             <SidebarNav pathname={pathname} expanded={expanded} animate={animate} />
           </div>
-          <div className="border-t border-border-subtle">
+          <div className="flex flex-col gap-1 border-t border-border-subtle p-2">
+            <ThemeRow expanded={expanded} animate={animate} />
             <PinButton
               pinned={pinned}
               expanded={expanded}
               animate={animate}
               onTogglePin={handleTogglePin}
             />
-            <UserMenu
-              user={user}
+            <UserRow user={user} expanded={expanded} animate={animate} />
+            <SignOutButton
               expanded={expanded}
               animate={animate}
               onSignOut={onSignOut}
@@ -137,7 +145,7 @@ export function Sidebar({ user, onSignOut }: SidebarProps) {
 
 function SidebarHeader({ expanded, animate }: { expanded: boolean; animate: boolean }) {
   return (
-    <div className="flex h-16 items-center gap-2 border-b border-border-subtle px-3">
+    <div className="flex h-16 items-center gap-3 border-b border-border-subtle px-3">
       <Link
         href="/"
         aria-label="AdTestLab home"
@@ -155,16 +163,6 @@ function SidebarHeader({ expanded, animate }: { expanded: boolean; animate: bool
       >
         AdTestLab
       </span>
-      <div
-        aria-hidden={!expanded}
-        className={cn(
-          'shrink-0',
-          animate && 'transition-opacity duration-150 ease-out delay-[50ms]',
-          expanded ? 'opacity-100' : 'pointer-events-none opacity-0'
-        )}
-      >
-        <ThemeToggle />
-      </div>
     </div>
   );
 }
@@ -204,31 +202,51 @@ function NavItem({ href, label, icon: Icon, active, expanded, animate }: NavItem
     <Link
       href={href}
       aria-label={expanded ? undefined : label}
-      className={cn(
-        'flex h-10 items-center gap-3 rounded-md px-3 text-body transition-colors',
-        active
-          ? 'bg-elevated text-text'
-          : 'text-text-muted hover:bg-elevated hover:text-text'
-      )}
+      className={cn(SIDEBAR_ITEM_BASE, ITEM_INTERACTIVE, active && ITEM_ACTIVE)}
     >
       <Icon className="size-5 shrink-0" />
-      <span
-        className={cn(
-          'min-w-0 truncate',
-          animate && 'transition-opacity duration-150 ease-out delay-[50ms]',
-          expanded ? 'opacity-100' : 'opacity-0'
-        )}
-      >
+      <ItemLabel expanded={expanded} animate={animate}>
         {label}
-      </span>
+      </ItemLabel>
     </Link>
   );
 
   if (expanded) return link;
-
   return (
     <Tooltip>
       <TooltipTrigger render={link} />
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ThemeRow({ expanded, animate }: { expanded: boolean; animate: boolean }) {
+  const { theme, toggle, mounted } = useTheme();
+
+  if (!mounted) {
+    return <div className="h-10" aria-hidden />;
+  }
+
+  const Icon = theme === 'dark' ? Sun : Moon;
+  const label = `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`;
+  const button = (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={label}
+      className={cn(SIDEBAR_ITEM_BASE, ITEM_INTERACTIVE)}
+    >
+      <Icon className="size-5 shrink-0" />
+      <ItemLabel expanded={expanded} animate={animate}>
+        {label}
+      </ItemLabel>
+    </button>
+  );
+
+  if (expanded) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
       <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   );
@@ -244,32 +262,22 @@ interface PinButtonProps {
 function PinButton({ pinned, expanded, animate, onTogglePin }: PinButtonProps) {
   const Icon = pinned ? PinOff : Pin;
   const label = pinned ? 'Unpin sidebar' : 'Pin sidebar';
-
   const button = (
     <button
       type="button"
       aria-label={label}
       aria-pressed={pinned}
       onClick={onTogglePin}
-      className={cn(
-        'flex h-10 w-full items-center gap-3 px-3 text-body text-text-muted transition-colors hover:bg-elevated hover:text-text'
-      )}
+      className={cn(SIDEBAR_ITEM_BASE, ITEM_INTERACTIVE)}
     >
       <Icon className="size-5 shrink-0" />
-      <span
-        className={cn(
-          'min-w-0 truncate',
-          animate && 'transition-opacity duration-150 ease-out delay-[50ms]',
-          expanded ? 'opacity-100' : 'opacity-0'
-        )}
-      >
+      <ItemLabel expanded={expanded} animate={animate}>
         {label}
-      </span>
+      </ItemLabel>
     </button>
   );
 
   if (expanded) return button;
-
   return (
     <Tooltip>
       <TooltipTrigger render={button} />
@@ -278,41 +286,37 @@ function PinButton({ pinned, expanded, animate, onTogglePin }: PinButtonProps) {
   );
 }
 
-interface UserMenuProps {
+interface UserRowProps {
   user: User;
   expanded: boolean;
   animate: boolean;
-  onSignOut: () => void;
 }
 
-function UserMenu({ user, expanded, animate, onSignOut }: UserMenuProps) {
+function UserRow({ user, expanded, animate }: UserRowProps) {
   const display = user.displayName ?? user.email ?? 'You';
   const initial = getInitial(user.displayName, user.email);
 
   return (
-    <div className="flex flex-col gap-1 p-2">
-      <div className="flex items-center gap-3 rounded-md px-1 py-2">
-        <div
-          aria-hidden
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-elevated text-caption font-medium text-text"
-        >
-          {initial ?? <UserIcon className="size-4" />}
-        </div>
-        <div
-          aria-hidden={!expanded}
-          className={cn(
-            'min-w-0 flex-1',
-            animate && 'transition-opacity duration-150 ease-out delay-[50ms]',
-            expanded ? 'opacity-100' : 'opacity-0'
-          )}
-        >
-          <p className="truncate text-caption text-text">{display}</p>
-          {user.displayName && user.email && (
-            <p className="truncate text-caption text-text-subtle">{user.email}</p>
-          )}
-        </div>
+    <div className={cn(SIDEBAR_ITEM_BASE, 'cursor-default')}>
+      <div
+        aria-hidden
+        className="flex size-5 shrink-0 items-center justify-center rounded-full bg-elevated text-caption font-medium leading-none text-text"
+      >
+        {initial ?? <UserIcon className="size-3" />}
       </div>
-      <SignOutButton expanded={expanded} animate={animate} onSignOut={onSignOut} />
+      <div
+        aria-hidden={!expanded}
+        className={cn(
+          'min-w-0 flex-1',
+          animate && 'transition-opacity duration-150 ease-out delay-[50ms]',
+          expanded ? 'opacity-100' : 'opacity-0'
+        )}
+      >
+        <p className="truncate text-caption text-text">{display}</p>
+        {user.displayName && user.email && (
+          <p className="truncate text-caption text-text-subtle">{user.email}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -325,27 +329,20 @@ interface SignOutButtonProps {
 
 function SignOutButton({ expanded, animate, onSignOut }: SignOutButtonProps) {
   const button = (
-    <Button
-      variant="ghost"
+    <button
+      type="button"
       onClick={onSignOut}
       aria-label="Sign out"
-      className="h-10 w-full justify-start gap-3 px-3"
+      className={cn(SIDEBAR_ITEM_BASE, ITEM_INTERACTIVE)}
     >
       <LogOut className="size-5 shrink-0" />
-      <span
-        className={cn(
-          'min-w-0 truncate',
-          animate && 'transition-opacity duration-150 ease-out delay-[50ms]',
-          expanded ? 'opacity-100' : 'opacity-0'
-        )}
-      >
+      <ItemLabel expanded={expanded} animate={animate}>
         Sign out
-      </span>
-    </Button>
+      </ItemLabel>
+    </button>
   );
 
   if (expanded) return button;
-
   return (
     <Tooltip>
       <TooltipTrigger render={button} />
@@ -353,6 +350,34 @@ function SignOutButton({ expanded, animate, onSignOut }: SignOutButtonProps) {
     </Tooltip>
   );
 }
+
+function ItemLabel({
+  expanded,
+  animate,
+  children,
+}: {
+  expanded: boolean;
+  animate: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        'min-w-0 truncate text-body',
+        animate && 'transition-opacity duration-150 ease-out delay-[50ms]',
+        expanded ? 'opacity-100' : 'opacity-0'
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+const SIDEBAR_ITEM_BASE =
+  'flex h-10 w-full items-center gap-3 rounded-md px-3 text-body';
+const ITEM_INTERACTIVE =
+  'text-text-muted transition-colors hover:bg-elevated hover:text-text';
+const ITEM_ACTIVE = 'bg-elevated text-text';
 
 function getInitial(displayName: string | null, email: string | null): string | null {
   const source = displayName ?? email;
