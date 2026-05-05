@@ -96,10 +96,23 @@ export function useDiagnose(): UseDiagnoseReturn {
       }
 
       if (res.ok) {
-        const data = (await res.json()) as DiagnoseSuccess;
-        setDiagnosis(data.diagnosis);
+        const raw = (await res.json()) as {
+          diagnosis: Omit<Diagnosis, 'createdAt' | 'expiresAt'> & {
+            createdAt: string;
+            expiresAt: string;
+          };
+          cached: boolean;
+        };
+        // JSON.stringify turns Date into an ISO string on the wire, so
+        // revive the two fields before handing them to consumers.
+        const diagnosis: Diagnosis = {
+          ...raw.diagnosis,
+          createdAt: new Date(raw.diagnosis.createdAt),
+          expiresAt: new Date(raw.diagnosis.expiresAt),
+        };
+        setDiagnosis(diagnosis);
         setStatus('success');
-        return data;
+        return { diagnosis, cached: raw.cached };
       }
 
       // Map non-OK responses to friendly errors
