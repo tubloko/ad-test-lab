@@ -24,6 +24,10 @@ import { AIDiagnosisPanel } from '@/components/verdict/AIDiagnosisPanel';
 import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
 import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import { CampaignEntriesTable } from '@/components/tables/CampaignEntriesTable';
+import { EntriesToggleButton } from '@/components/tables/EntriesToggleButton';
+import { BackfillButton } from '@/components/tables/BackfillButton';
+import { useEntriesTableController } from '@/hooks/useEntriesTableController';
+import { isWithinRange } from '@/lib/utils/dateRange';
 import { AdsetCardList } from '@/components/AdsetCard';
 import { NewAdsetDialog } from '@/components/forms/NewAdsetDialog';
 import { EditCampaignDialog } from '@/components/forms/EditCampaignDialog';
@@ -98,6 +102,28 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
   const [newAdsetOpen, setNewAdsetOpen] = useState(false);
   const [editCampaignOpen, setEditCampaignOpen] = useState(false);
   const [pendingKill, setPendingKill] = useState<CampaignStatus | null>(null);
+
+  const dailyEntryDates = useMemo(() => entries.map((e) => e.date), [entries]);
+  const adsetSpendDates = useMemo(
+    () => Array.from(adsetSpendByDate.keys()),
+    [adsetSpendByDate],
+  );
+  const dailyController = useEntriesTableController({
+    entryDates: dailyEntryDates,
+    today,
+    autoIncludeDates: adsetSpendDates,
+    storageKey: 'campaign-entries',
+  });
+  const dailyHistoricalCount = useMemo(() => {
+    const dates = new Set<string>();
+    for (const e of entries) {
+      if (isWithinRange(e.date, dailyFromDate, today)) dates.add(e.date);
+    }
+    for (const r of dailyController.extras) {
+      if (isWithinRange(r.date, dailyFromDate, today)) dates.add(r.date);
+    }
+    return Math.max(0, dates.size - (dates.has(today) ? 1 : 0));
+  }, [entries, dailyController.extras, dailyFromDate, today]);
 
   const profitBreakdown = useMemo(
     () =>
@@ -288,18 +314,27 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         />
       )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-subheading text-text">Daily entries</h2>
-          <DateRangeSelect preset={dailyPreset} onPresetChange={setDailyPreset} />
+          <div className="flex flex-wrap items-center gap-1">
+            <EntriesToggleButton
+              expanded={dailyController.expanded}
+              historicalCount={dailyHistoricalCount}
+              onToggle={dailyController.toggleExpanded}
+            />
+            <BackfillButton onClick={dailyController.openBackfill} />
+            <DateRangeSelect preset={dailyPreset} onPresetChange={setDailyPreset} />
+          </div>
         </div>
         <CampaignEntriesTable
           entries={entries}
           adsetSpendByDate={adsetSpendByDate}
           targetCPA={targetCPA}
-          timezone={getBrowserTimezone()}
+          today={today}
           fromDate={dailyFromDate}
           productFees={fees}
+          controller={dailyController}
           onSaveEntry={saveEntry}
           onDeleteEntry={deleteEntry}
         />

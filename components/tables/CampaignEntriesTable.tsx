@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import {
   Loader2,
   Check,
   AlertTriangle,
   Trash2,
   Sigma,
-  CalendarPlus,
 } from 'lucide-react';
 import {
   TableCell,
@@ -21,12 +19,10 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { BackfillDialog } from '@/components/forms/BackfillDialog';
 import { CollapsibleEntriesTable } from '@/components/tables/CollapsibleEntriesTable';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
-import { useExpandedTable } from '@/hooks/useExpandedTable';
 import { cpa, roas } from '@/lib/metrics';
 import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatDate } from '@/lib/utils/formatDate';
-import { todayInTimezone } from '@/lib/utils/date';
 import {
   cpaTone,
   roasTone,
@@ -38,21 +34,21 @@ import { cn } from '@/lib/utils';
 import type { EnrichedCampaignEntry } from '@/hooks/useCampaignEntries';
 import type { CampaignEntryInput } from '@/types/entry';
 import type { ProductFees } from '@/types/product';
+import type { EntriesTableController } from '@/hooks/useEntriesTableController';
 
 interface CampaignEntriesTableProps {
   entries: EnrichedCampaignEntry[];
   /** Per-date sum of adset spend — drives the (read-only) Spend column. */
   adsetSpendByDate: Map<string, number>;
   targetCPA: number;
-  timezone: string;
+  today: string;
   /** Inclusive lower bound (YYYY-MM-DD) for which historical rows show. `null` = no lower bound. */
   fromDate: string | null;
   productFees?: ProductFees;
+  controller: EntriesTableController;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
 }
-
-const STORAGE_KEY = 'campaign-entries';
 
 function rowProfit(
   revenue: number,
@@ -94,90 +90,33 @@ function toDraft(entry: EnrichedCampaignEntry): RowDraft {
 
 const EMPTY_DRAFT: RowDraft = { spend: '', revenue: '', orders: '', cogs: '' };
 
-interface ExtraRow {
-  tempId: string;
-  date: string;
-}
-
 export function CampaignEntriesTable({
   entries,
   adsetSpendByDate,
   targetCPA,
-  timezone,
+  today,
   fromDate,
   productFees,
+  controller,
   onSaveEntry,
   onDeleteEntry,
 }: CampaignEntriesTableProps) {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const today = todayInTimezone(timezone);
-
-  const { expanded, setExpanded } = useExpandedTable(STORAGE_KEY);
+  const {
+    extras,
+    expanded,
+    pendingFocusDate,
+    clearPendingFocus,
+    removeExtra,
+    backfillOpen,
+    setBackfillOpen,
+    handleBackfill,
+  } = controller;
 
   const filtered = useMemo(
     () => entries.filter((e) => isWithinRange(e.date, fromDate, today)),
     [entries, fromDate, today],
   );
-
-  const [extras, setExtras] = useState<ExtraRow[]>([
-    { tempId: 'today-default', date: today },
-  ]);
-
-  // Maintain extras for: today, adset-only dates with no campaign entry,
-  // user-backfilled dates. Drops any extra whose date now has a saved entry.
-  useEffect(() => {
-    const savedDates = new Set(entries.map((e) => e.date));
-    setExtras((prev) => {
-      const next = prev.filter((r) => !savedDates.has(r.date));
-      if (!savedDates.has(today) && !next.some((r) => r.date === today)) {
-        next.unshift({ tempId: `today-${today}`, date: today });
-      }
-      for (const adsetDate of adsetSpendByDate.keys()) {
-        if (savedDates.has(adsetDate)) continue;
-        if (next.some((r) => r.date === adsetDate)) continue;
-        next.push({ tempId: `adset-${adsetDate}`, date: adsetDate });
-      }
-      const sameAsBefore =
-        next.length === prev.length && next.every((r, i) => r === prev[i]);
-      return sameAsBefore ? prev : next;
-    });
-  }, [entries, today, adsetSpendByDate]);
-
-  const [backfillOpen, setBackfillOpen] = useState(false);
-  const [pendingFocusDate, setPendingFocusDate] = useState<string | null>(null);
-
-  const handleBackfill = (dates: string[]) => {
-    const existing = new Set([
-      ...entries.map((e) => e.date),
-      ...extras.map((r) => r.date),
-    ]);
-    const newRows: ExtraRow[] = [];
-    let skipped = 0;
-    let oldestNew: string | null = null;
-    for (const d of dates) {
-      if (existing.has(d)) {
-        skipped++;
-        continue;
-      }
-      newRows.push({ tempId: crypto.randomUUID(), date: d });
-      if (!oldestNew || d < oldestNew) oldestNew = d;
-    }
-    setBackfillOpen(false);
-    if (newRows.length === 0) {
-      toast.info('All those dates already have rows.');
-      setPendingFocusDate(dates[0] ?? null);
-      setExpanded(true);
-      return;
-    }
-    setExtras((prev) => [...prev, ...newRows]);
-    if (oldestNew) setPendingFocusDate(oldestNew);
-    setExpanded(true);
-    if (skipped > 0) {
-      toast.success(`Added ${newRows.length} rows. ${skipped} dates already existed.`);
-    } else {
-      toast.success(`Added ${newRows.length} rows.`);
-    }
-  };
 
   // DESC: today first, then yesterday, then older. A row never reorders
   // when an extra promotes to a saved entry because the date drives sort.
@@ -204,26 +143,22 @@ export function CampaignEntriesTable({
   const todayRowSpec = allRows[0] ?? null;
   const historicalRowSpecs = allRows.slice(1);
 
-  // Grid covers only what's actually rendered. Today is index 0; historical
-  // rows occupy 1..N. When collapsed, rowCount=1, so navigation stays put.
   const visibleCount = expanded ? allRows.length : 1;
   const grid = useGridNavigation({
     rowCount: visibleCount,
     colCount: EDITABLE_COLS.length,
   });
 
-  // After backfill, focus the oldest new draft. Auto-expand triggers above.
   useEffect(() => {
     if (!pendingFocusDate) return;
     const idx = allRows.findIndex((r) => r.date === pendingFocusDate);
     if (idx >= 0 && (expanded || idx === 0)) {
       grid.focusCell(idx, 0);
-      setPendingFocusDate(null);
+      clearPendingFocus();
     }
-  }, [pendingFocusDate, allRows, grid, expanded]);
+  }, [pendingFocusDate, allRows, grid, expanded, clearPendingFocus]);
 
-  const historicalCount = historicalRowSpecs.length;
-  const hasHistorical = historicalCount > 0;
+  const hasHistorical = historicalRowSpecs.length > 0;
 
   const renderRow = (r: Row, idx: number) => {
     if (r.kind === 'extra') {
@@ -241,12 +176,10 @@ export function CampaignEntriesTable({
           // removal — hide the trash so users don't think it's doing nothing.
           // User-backfilled rows have UUID tempIds.
           removable={
-            !r.tempId.startsWith('today-') && !r.tempId.startsWith('adset-')
+            !r.tempId.startsWith('today-') && !r.tempId.startsWith('auto-')
           }
           onSaveEntry={onSaveEntry}
-          onRemoveExtra={() =>
-            setExtras((prev) => prev.filter((x) => x.tempId !== r.tempId))
-          }
+          onRemoveExtra={() => removeExtra(r.tempId)}
         />
       );
     }
@@ -266,38 +199,28 @@ export function CampaignEntriesTable({
   };
 
   return (
-    <div className="space-y-4">
-      <CollapsibleEntriesTable
-        storageKey={STORAGE_KEY}
-        historicalCount={historicalCount}
-        header={
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead className="text-right">Spend</TableHead>
-            <TableHead className="text-right">Revenue</TableHead>
-            <TableHead className="text-right">Orders</TableHead>
-            <TableHead className="text-right">COGS</TableHead>
-            <TableHead className="text-right">CPA</TableHead>
-            <TableHead className="text-right">ROAS</TableHead>
-            <TableHead className="text-right">Profit</TableHead>
-            <TableHead className="w-8" />
-            <TableHead className="w-10" />
-          </TableRow>
-        }
-        toolbar={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setBackfillOpen(true)}
-          >
-            <CalendarPlus className="size-4" />
-            Backfill past days
-          </Button>
-        }
-        todayRow={todayRowSpec ? renderRow(todayRowSpec, 0) : null}
-        historicalRows={historicalRowSpecs.map((r, i) => renderRow(r, i + 1))}
-      />
+    <div className="space-y-2">
+      <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        <CollapsibleEntriesTable
+          expanded={expanded}
+          header={
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead className="text-right">Spend</TableHead>
+              <TableHead className="text-right">Revenue</TableHead>
+              <TableHead className="text-right">Orders</TableHead>
+              <TableHead className="text-right">COGS</TableHead>
+              <TableHead className="text-right">CPA</TableHead>
+              <TableHead className="text-right">ROAS</TableHead>
+              <TableHead className="text-right">Profit</TableHead>
+              <TableHead className="w-8" />
+              <TableHead className="w-10" />
+            </TableRow>
+          }
+          todayRow={todayRowSpec ? renderRow(todayRowSpec, 0) : null}
+          historicalRows={historicalRowSpecs.map((r, i) => renderRow(r, i + 1))}
+        />
+      </div>
 
       {!hasHistorical && (
         <p className="text-caption text-text-muted">

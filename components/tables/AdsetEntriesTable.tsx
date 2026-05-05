@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { Loader2, Check, AlertTriangle, Trash2, CalendarPlus } from 'lucide-react';
+import { Loader2, Check, AlertTriangle, Trash2 } from 'lucide-react';
 import {
   TableCell,
   TableHead,
@@ -14,12 +13,10 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { BackfillDialog } from '@/components/forms/BackfillDialog';
 import { CollapsibleEntriesTable } from '@/components/tables/CollapsibleEntriesTable';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
-import { useExpandedTable } from '@/hooks/useExpandedTable';
 import { lpvRate, atcRate, icFromLPV, convFromLPV } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatPercent } from '@/lib/utils/formatPercent';
 import { formatDate } from '@/lib/utils/formatDate';
-import { todayInTimezone } from '@/lib/utils/date';
 import {
   rateTone,
   cpcTone,
@@ -33,13 +30,14 @@ import {
 import { isWithinRange } from '@/lib/utils/dateRange';
 import { cn } from '@/lib/utils';
 import type { AdsetEntry, AdsetEntryInput } from '@/types/entry';
+import type { EntriesTableController } from '@/hooks/useEntriesTableController';
 
 interface AdsetEntriesTableProps {
-  adsetId: string;
   entries: AdsetEntry[];
-  timezone: string;
   /** Inclusive lower bound (YYYY-MM-DD) for which historical rows show. `null` = no lower bound. */
   fromDate: string | null;
+  today: string;
+  controller: EntriesTableController;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
 }
@@ -87,82 +85,30 @@ const EMPTY_DRAFT: RowDraft = {
   ctr: '',
 };
 
-interface ExtraRow {
-  tempId: string;
-  date: string;
-}
-
 export function AdsetEntriesTable({
-  adsetId,
   entries,
-  timezone,
   fromDate,
+  today,
+  controller,
   onSaveEntry,
   onDeleteEntry,
 }: AdsetEntriesTableProps) {
-  const storageKey = `adset-${adsetId}-entries`;
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const today = todayInTimezone(timezone);
-
-  const { expanded, setExpanded } = useExpandedTable(storageKey);
+  const {
+    extras,
+    expanded,
+    pendingFocusDate,
+    clearPendingFocus,
+    removeExtra,
+    backfillOpen,
+    setBackfillOpen,
+    handleBackfill,
+  } = controller;
 
   const filtered = useMemo(
     () => entries.filter((e) => isWithinRange(e.date, fromDate, today)),
     [entries, fromDate, today],
   );
-
-  const [extras, setExtras] = useState<ExtraRow[]>([
-    { tempId: 'today-default', date: today },
-  ]);
-
-  useEffect(() => {
-    const savedDates = new Set(entries.map((e) => e.date));
-    setExtras((prev) => {
-      let next = prev.filter((r) => !savedDates.has(r.date));
-      if (!savedDates.has(today) && !next.some((r) => r.date === today)) {
-        next = [{ tempId: `today-${today}`, date: today }, ...next];
-      }
-      return next.length === prev.length && next.every((r, i) => r === prev[i])
-        ? prev
-        : next;
-    });
-  }, [entries, today]);
-
-  const [backfillOpen, setBackfillOpen] = useState(false);
-  const [pendingFocusDate, setPendingFocusDate] = useState<string | null>(null);
-
-  const handleBackfill = (dates: string[]) => {
-    const existing = new Set([
-      ...entries.map((e) => e.date),
-      ...extras.map((r) => r.date),
-    ]);
-    const newRows: ExtraRow[] = [];
-    let skipped = 0;
-    let oldestNew: string | null = null;
-    for (const d of dates) {
-      if (existing.has(d)) {
-        skipped++;
-        continue;
-      }
-      newRows.push({ tempId: crypto.randomUUID(), date: d });
-      if (!oldestNew || d < oldestNew) oldestNew = d;
-    }
-    setBackfillOpen(false);
-    if (newRows.length === 0) {
-      toast.info('All those dates already have rows.');
-      setPendingFocusDate(dates[0] ?? null);
-      setExpanded(true);
-      return;
-    }
-    setExtras((prev) => [...prev, ...newRows]);
-    if (oldestNew) setPendingFocusDate(oldestNew);
-    setExpanded(true);
-    if (skipped > 0) {
-      toast.success(`Added ${newRows.length} rows. ${skipped} dates already existed.`);
-    } else {
-      toast.success(`Added ${newRows.length} rows.`);
-    }
-  };
 
   // DESC: today first, then historical descending. Keeps row identity
   // stable through the extra → saved transition.
@@ -199,12 +145,11 @@ export function AdsetEntriesTable({
     const idx = allRows.findIndex((r) => r.date === pendingFocusDate);
     if (idx >= 0 && (expanded || idx === 0)) {
       grid.focusCell(idx, 0);
-      setPendingFocusDate(null);
+      clearPendingFocus();
     }
-  }, [pendingFocusDate, allRows, grid, expanded]);
+  }, [pendingFocusDate, allRows, grid, expanded, clearPendingFocus]);
 
-  const historicalCount = historicalRowSpecs.length;
-  const hasHistorical = historicalCount > 0;
+  const hasHistorical = historicalRowSpecs.length > 0;
 
   const renderRow = (r: Row, idx: number) => {
     if (r.kind === 'extra') {
@@ -216,9 +161,7 @@ export function AdsetEntriesTable({
           date={r.date}
           grid={grid}
           onSaveEntry={onSaveEntry}
-          onRemoveExtra={() =>
-            setExtras((prev) => prev.filter((x) => x.tempId !== r.tempId))
-          }
+          onRemoveExtra={() => removeExtra(r.tempId)}
         />
       );
     }
@@ -236,10 +179,9 @@ export function AdsetEntriesTable({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <CollapsibleEntriesTable
-        storageKey={storageKey}
-        historicalCount={historicalCount}
+        expanded={expanded}
         header={
           <TableRow>
             <TableHead>Date</TableHead>
@@ -259,23 +201,12 @@ export function AdsetEntriesTable({
             <TableHead className="w-10" />
           </TableRow>
         }
-        toolbar={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setBackfillOpen(true)}
-          >
-            <CalendarPlus className="size-4" />
-            Backfill past days
-          </Button>
-        }
         todayRow={todayRowSpec ? renderRow(todayRowSpec, 0) : null}
         historicalRows={historicalRowSpecs.map((r, i) => renderRow(r, i + 1))}
       />
 
       {!hasHistorical && (
-        <p className="text-caption text-text-muted">
+        <p className="px-3 pb-2 text-caption text-text-muted">
           Have historical data? Use{' '}
           <button
             type="button"

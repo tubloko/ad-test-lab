@@ -10,14 +10,17 @@ import { AdsetHealthDot } from './AdsetHealthDot';
 import { AdsetSummaryStrip } from './AdsetSummaryStrip';
 import { DateRangeSelect } from './DateRangeSelect';
 import { AdsetEntriesTable } from '@/components/tables/AdsetEntriesTable';
+import { EntriesToggleButton } from '@/components/tables/EntriesToggleButton';
+import { BackfillButton } from '@/components/tables/BackfillButton';
 import { EditAdsetDialog } from '@/components/forms/EditAdsetDialog';
 import { useAdsetEntries } from '@/hooks/useAdsetEntries';
 import { useAdsetEntryMutations } from '@/hooks/useAdsetEntryMutations';
+import { useEntriesTableController } from '@/hooks/useEntriesTableController';
 import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import { adsetHealth } from '@/lib/utils/adset-health';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { getBrowserTimezone, todayInTimezone } from '@/lib/utils/date';
-import { rangeStartDate, type DateRangePreset } from '@/lib/utils/dateRange';
+import { rangeStartDate, type DateRangePreset, isWithinRange } from '@/lib/utils/dateRange';
 import {
   ADSET_TRANSITIONS,
   type Adset,
@@ -47,7 +50,7 @@ export function AdsetCardList({
   if (adsets.length === 0) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {adsets.map((adset) => (
         <AdsetCard
           key={adset.id}
@@ -112,6 +115,24 @@ function AdsetCard({
     adset.id,
   );
 
+  const entryDates = useMemo(() => entries.map((e) => e.date), [entries]);
+  const controller = useEntriesTableController({
+    entryDates,
+    today,
+    storageKey: `adset-${adset.id}-entries`,
+  });
+
+  const historicalCount = useMemo(() => {
+    const dates = new Set<string>();
+    for (const e of entries) {
+      if (isWithinRange(e.date, fromDate, today)) dates.add(e.date);
+    }
+    for (const r of controller.extras) {
+      if (isWithinRange(r.date, fromDate, today)) dates.add(r.date);
+    }
+    return Math.max(0, dates.size - (dates.has(today) ? 1 : 0));
+  }, [entries, controller.extras, fromDate, today]);
+
   const totals = useMemo(
     () => computeAdsetTotals(entries, range),
     [entries, range],
@@ -129,7 +150,7 @@ function AdsetCard({
   return (
     <div className="rounded-lg border border-border bg-surface">
       <div className="flex flex-col gap-2 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <AdsetHealthDot health={health} />
             <span className="truncate text-subheading text-text">{adset.name}</span>
@@ -146,13 +167,20 @@ function AdsetCard({
             </span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-1">
+            <EntriesToggleButton
+              expanded={controller.expanded}
+              historicalCount={historicalCount}
+              onToggle={controller.toggleExpanded}
+            />
+            <BackfillButton onClick={controller.openBackfill} />
             <DateRangeSelect preset={preset} onPresetChange={setPreset} />
             <Button
               type="button"
               variant="ghost"
               size="icon"
               aria-label="Edit adset"
+              title="Edit adset"
               onClick={() => setEditOpen(true)}
             >
               <Pencil className="size-4" />
@@ -162,6 +190,7 @@ function AdsetCard({
               variant="ghost"
               size="icon"
               aria-label="Delete adset"
+              title="Delete adset"
               onClick={() => onDelete(adset.id)}
             >
               <Trash2 className="size-4" />
@@ -174,12 +203,12 @@ function AdsetCard({
         </div>
       </div>
 
-      <div className="border-t border-border-subtle p-4">
+      <div className="border-t border-border-subtle">
         <AdsetEntriesTable
-          adsetId={adset.id}
           entries={entries}
-          timezone={timezone}
+          today={today}
           fromDate={fromDate}
+          controller={controller}
           onSaveEntry={saveEntry}
           onDeleteEntry={deleteEntry}
         />
