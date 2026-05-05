@@ -289,9 +289,9 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
       )}
 
       <section className="space-y-3">
-        <div className="flex items-center gap-3">
-          <DateRangeSelect preset={dailyPreset} onPresetChange={setDailyPreset} />
+        <div className="flex items-center justify-between gap-3">
           <h2 className="text-subheading text-text">Daily entries</h2>
+          <DateRangeSelect preset={dailyPreset} onPresetChange={setDailyPreset} />
         </div>
         <CampaignEntriesTable
           entries={entries}
