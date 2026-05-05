@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Pencil, Trash2, Plus, ListTodo, Layers, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, Plus, ListTodo, Layers } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useProduct } from '@/hooks/useProduct';
 import { useCampaign } from '@/hooks/useCampaign';
@@ -23,7 +23,7 @@ import { AIDiagnosisPanel } from '@/components/verdict/AIDiagnosisPanel';
 import { computeProfitWithFees } from '@/lib/metrics/profitWithFees';
 import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import { CampaignEntriesTable } from '@/components/tables/CampaignEntriesTable';
-import { AdsetAccordion } from '@/components/AdsetAccordion';
+import { AdsetCardList } from '@/components/AdsetCard';
 import { NewAdsetDialog } from '@/components/forms/NewAdsetDialog';
 import { EditCampaignDialog } from '@/components/forms/EditCampaignDialog';
 import { SpendVsRevenueChart } from '@/components/charts/SpendVsRevenueChart';
@@ -285,23 +285,18 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
         />
       )}
 
-      <details className="group rounded-lg border border-border bg-surface">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
-          <ChevronDown className="size-4 text-text-muted transition-transform group-open:rotate-0 -rotate-90" />
-          <h2 className="text-subheading text-text">Daily entries</h2>
-        </summary>
-        <div className="border-t border-border-subtle p-4">
-          <CampaignEntriesTable
-            entries={entries}
-            adsetSpendByDate={adsetSpendByDate}
-            targetCPA={targetCPA}
-            timezone={getBrowserTimezone()}
-            productFees={fees}
-            onSaveEntry={saveEntry}
-            onDeleteEntry={deleteEntry}
-          />
-        </div>
-      </details>
+      <section className="space-y-3">
+        <h2 className="text-subheading text-text">Daily entries</h2>
+        <CampaignEntriesTable
+          entries={entries}
+          adsetSpendByDate={adsetSpendByDate}
+          targetCPA={targetCPA}
+          timezone={getBrowserTimezone()}
+          productFees={fees}
+          onSaveEntry={saveEntry}
+          onDeleteEntry={deleteEntry}
+        />
+      </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -329,7 +324,7 @@ export function CampaignDetail({ productId, campaignId }: CampaignDetailProps) {
             }
           />
         ) : (
-          <AdsetAccordion
+          <AdsetCardList
             productId={productId}
             campaignId={campaignId}
             productName={product?.name ?? ''}

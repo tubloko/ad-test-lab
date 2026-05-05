@@ -4,12 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, Check, AlertTriangle, Trash2, CalendarPlus } from 'lucide-react';
 import {
-  Table,
-  TableBody,
   TableCell,
-  TableFooter,
   TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -17,12 +13,14 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { DateRangeSelect } from '@/components/DateRangeSelect';
 import { BackfillDialog } from '@/components/forms/BackfillDialog';
+import { CollapsibleEntriesTable } from '@/components/tables/CollapsibleEntriesTable';
 import { useGridNavigation } from '@/hooks/useGridNavigation';
+import { useExpandedTable } from '@/hooks/useExpandedTable';
 import { lpvRate, atcRate, icFromLPV, convFromLPV } from '@/lib/metrics';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { formatPercent } from '@/lib/utils/formatPercent';
 import { formatDate } from '@/lib/utils/formatDate';
-import { todayInTimezone, subtractDays } from '@/lib/utils/date';
+import { todayInTimezone } from '@/lib/utils/date';
 import {
   rateTone,
   cpcTone,
@@ -39,17 +37,16 @@ import {
   type DateRangePreset,
 } from '@/lib/utils/dateRange';
 import { cn } from '@/lib/utils';
-import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import type { AdsetEntry, AdsetEntryInput } from '@/types/entry';
 
 interface AdsetEntriesTableProps {
+  adsetId: string;
   entries: AdsetEntry[];
   timezone: string;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
   onDeleteEntry: (date: string) => Promise<void>;
 }
 
-// Editable columns, in visual + grid-navigation order.
 const EDITABLE_COLS = [
   'spend',
   'ctr',
@@ -99,15 +96,19 @@ interface ExtraRow {
 }
 
 export function AdsetEntriesTable({
+  adsetId,
   entries,
   timezone,
   onSaveEntry,
   onDeleteEntry,
 }: AdsetEntriesTableProps) {
+  const storageKey = `adset-${adsetId}-entries`;
   const [preset, setPreset] = useState<DateRangePreset>('14d');
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const today = todayInTimezone(timezone);
   const fromDate = rangeStartDate(preset, today);
+
+  const { expanded, setExpanded } = useExpandedTable(storageKey);
 
   const filtered = useMemo(
     () => entries.filter((e) => isWithinRange(e.date, fromDate, today)),
@@ -154,10 +155,12 @@ export function AdsetEntriesTable({
     if (newRows.length === 0) {
       toast.info('All those dates already have rows.');
       setPendingFocusDate(dates[0] ?? null);
+      setExpanded(true);
       return;
     }
     setExtras((prev) => [...prev, ...newRows]);
     if (oldestNew) setPendingFocusDate(oldestNew);
+    setExpanded(true);
     if (skipped > 0) {
       toast.success(`Added ${newRows.length} rows. ${skipped} dates already existed.`);
     } else {
@@ -165,9 +168,8 @@ export function AdsetEntriesTable({
     }
   };
 
-  // Single date-sorted list (old → new). Extras and saved entries share
-  // one stable ordering so a row never jumps when it transitions from
-  // local-draft to saved.
+  // DESC: today first, then historical descending. Keeps row identity
+  // stable through the extra → saved transition.
   type Row =
     | { kind: 'extra'; date: string; tempId: string }
     | { kind: 'saved'; date: string; entry: AdsetEntry };
@@ -183,43 +185,89 @@ export function AdsetEntriesTable({
       entry: e,
     }));
     return [...fromExtras, ...fromEntries].sort((a, b) =>
-      a.date.localeCompare(b.date),
+      b.date.localeCompare(a.date),
     );
   }, [extras, filtered]);
 
-  const totalRows = allRows.length;
+  const todayRowSpec = allRows[0] ?? null;
+  const historicalRowSpecs = allRows.slice(1);
+
+  const visibleCount = expanded ? allRows.length : 1;
   const grid = useGridNavigation({
-    rowCount: totalRows,
+    rowCount: visibleCount,
     colCount: EDITABLE_COLS.length,
   });
-
-  // Use the shared totals helper so the in-table footer (when shown) and
-  // the always-visible AdsetTotalsRow (in the accordion) compute the
-  // exact same numbers.
-  const totals = useMemo(
-    () => computeAdsetTotals(filtered, { from: fromDate, to: today }),
-    [filtered, fromDate, today],
-  );
 
   useEffect(() => {
     if (!pendingFocusDate) return;
     const idx = allRows.findIndex((r) => r.date === pendingFocusDate);
-    if (idx >= 0) {
+    if (idx >= 0 && (expanded || idx === 0)) {
       grid.focusCell(idx, 0);
       setPendingFocusDate(null);
     }
-  }, [pendingFocusDate, allRows, grid]);
+  }, [pendingFocusDate, allRows, grid, expanded]);
 
-  const hasHistorical =
-    entries.some((e) => e.date !== today) || extras.some((r) => r.date !== today);
+  const historicalCount = historicalRowSpecs.length;
+  const hasHistorical = historicalCount > 0;
+
+  const renderRow = (r: Row, idx: number) => {
+    if (r.kind === 'extra') {
+      return (
+        <ExtraRowComponent
+          key={r.tempId}
+          row={idx}
+          today={today}
+          date={r.date}
+          grid={grid}
+          onSaveEntry={onSaveEntry}
+          onRemoveExtra={() =>
+            setExtras((prev) => prev.filter((x) => x.tempId !== r.tempId))
+          }
+        />
+      );
+    }
+    return (
+      <SavedEntryRow
+        key={r.date}
+        row={idx}
+        today={today}
+        entry={r.entry}
+        grid={grid}
+        onSaveEntry={onSaveEntry}
+        onDeleteRequest={() => setPendingDelete(r.date)}
+      />
+    );
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-caption text-text-muted">
-          {filtered.length} {filtered.length === 1 ? 'day' : 'days'} in view
-        </p>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end">
+        <DateRangeSelect preset={preset} onPresetChange={setPreset} />
+      </div>
+
+      <CollapsibleEntriesTable
+        storageKey={storageKey}
+        historicalCount={historicalCount}
+        header={
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead className="text-right">Spend</TableHead>
+            <TableHead className="text-right">CTR%</TableHead>
+            <TableHead className="text-right">Clicks</TableHead>
+            <TableHead className="text-right">LPV</TableHead>
+            <TableHead className="text-right">ATC</TableHead>
+            <TableHead className="text-right">IC</TableHead>
+            <TableHead className="text-right">Purchases</TableHead>
+            <TableHead className="text-right">CPC</TableHead>
+            <TableHead className="text-right">LPV%</TableHead>
+            <TableHead className="text-right">ATC%</TableHead>
+            <TableHead className="text-right">IC%</TableHead>
+            <TableHead className="text-right">Conv%</TableHead>
+            <TableHead className="w-8" />
+            <TableHead className="w-10" />
+          </TableRow>
+        }
+        toolbar={
           <Button
             type="button"
             variant="outline"
@@ -229,151 +277,10 @@ export function AdsetEntriesTable({
             <CalendarPlus className="size-4" />
             Backfill past days
           </Button>
-          <DateRangeSelect preset={preset} onPresetChange={setPreset} />
-        </div>
-      </div>
-
-      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead className="text-right">Spend</TableHead>
-              <TableHead className="text-right">CTR%</TableHead>
-              <TableHead className="text-right">Clicks</TableHead>
-              <TableHead className="text-right">LPV</TableHead>
-              <TableHead className="text-right">ATC</TableHead>
-              <TableHead className="text-right">IC</TableHead>
-              <TableHead className="text-right">Purchases</TableHead>
-              <TableHead className="text-right">CPC</TableHead>
-              <TableHead className="text-right">LPV%</TableHead>
-              <TableHead className="text-right">ATC%</TableHead>
-              <TableHead className="text-right">IC%</TableHead>
-              <TableHead className="text-right">Conv%</TableHead>
-              <TableHead className="w-8" />
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {allRows.map((r, idx) =>
-              r.kind === 'extra' ? (
-                <ExtraRowComponent
-                  key={r.tempId}
-                  row={idx}
-                  today={today}
-                  date={r.date}
-                  grid={grid}
-                  onSaveEntry={onSaveEntry}
-                  onRemoveExtra={() =>
-                    setExtras((prev) => prev.filter((x) => x.tempId !== r.tempId))
-                  }
-                />
-              ) : (
-                <SavedEntryRow
-                  key={r.date}
-                  row={idx}
-                  today={today}
-                  entry={r.entry}
-                  grid={grid}
-                  onSaveEntry={onSaveEntry}
-                  onDeleteRequest={() => setPendingDelete(r.date)}
-                />
-              ),
-            )}
-          </TableBody>
-          {filtered.length > 0 && (
-            <TableFooter>
-              {/* pb-5 on every cell so the horizontal scrollbar that
-                  shadcn's Table renders along the table's bottom edge
-                  has its own gutter below the totals text. */}
-              <TableRow className="bg-elevated [&>td]:pb-5">
-                <TableCell className="text-subheading text-text">Total</TableCell>
-                <TableCell className="text-right text-mono text-text">
-                  {formatCurrency(totals.totalSpend)}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    totals.ctrTracked
-                      ? TONE_TEXT_CLASS[ctrTone(totals.ctr)]
-                      : 'text-text-muted',
-                  )}
-                  title={
-                    totals.ctrTracked
-                      ? undefined
-                      : 'Enter CTR per day to compute the total'
-                  }
-                >
-                  {totals.ctrTracked ? formatPercent(totals.ctr) : '—'}
-                </TableCell>
-                <TableCell className="text-right text-mono text-text">
-                  {totals.totalClicks}
-                </TableCell>
-                <TableCell className="text-right text-mono text-text">
-                  {totals.totalLPV}
-                </TableCell>
-                <TableCell className="text-right text-mono text-text">
-                  {totals.totalATC}
-                </TableCell>
-                <TableCell className="text-right text-mono text-text">
-                  {totals.totalIC}
-                </TableCell>
-                <TableCell className="text-right text-mono text-text">
-                  {totals.totalPurchases}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    totals.totalClicks > 0
-                      ? TONE_TEXT_CLASS[cpcTone(totals.cpc)]
-                      : 'text-text-muted',
-                  )}
-                >
-                  {totals.totalClicks > 0 ? formatCurrency(totals.cpc) : '—'}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    TONE_TEXT_CLASS[rateTone(totals.lpvRate, HEALTHY_LPV_RATE)],
-                  )}
-                >
-                  {totals.totalClicks > 0 ? formatPercent(totals.lpvRate) : '—'}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    TONE_TEXT_CLASS[rateTone(totals.atcRate, HEALTHY_ATC_RATE)],
-                  )}
-                >
-                  {totals.totalLPV > 0 ? formatPercent(totals.atcRate) : '—'}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    totals.totalLPV > 0
-                      ? TONE_TEXT_CLASS[rateTone(totals.icRate, HEALTHY_IC_FROM_LPV)]
-                      : 'text-text-muted',
-                  )}
-                >
-                  {totals.totalLPV > 0 ? formatPercent(totals.icRate) : '—'}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right text-mono',
-                    totals.totalLPV > 0
-                      ? TONE_TEXT_CLASS[rateTone(totals.purchaseRate, HEALTHY_CONV_FROM_LPV)]
-                      : 'text-text-muted',
-                  )}
-                >
-                  {totals.totalLPV > 0 ? formatPercent(totals.purchaseRate) : '—'}
-                </TableCell>
-                <TableCell />
-                <TableCell />
-              </TableRow>
-            </TableFooter>
-          )}
-        </Table>
-      </div>
+        }
+        todayRow={todayRowSpec ? renderRow(todayRowSpec, 0) : null}
+        historicalRows={historicalRowSpecs.map((r, i) => renderRow(r, i + 1))}
+      />
 
       {!hasHistorical && (
         <p className="text-caption text-text-muted">
@@ -672,8 +579,6 @@ function Row({
   const cpc = clicks > 0 ? spend / clicks : 0;
   const lpvR = lpvRate(lpv, clicks);
   const atcR = atcRate(atc, lpv);
-  // IC% and Conv% are now relative to landing-page views — same denominator
-  // as ATC% — so the funnel stages compare against one consistent base.
   const icR = icFromLPV(ic, lpv);
   const convR = convFromLPV(purchases, lpv);
 
@@ -817,4 +722,3 @@ function dirtyFieldsOnly(current: RowDraft, initial: RowDraft): Partial<RowDraft
   for (const k of EDITABLE_COLS) if (current[k] !== initial[k]) out[k] = current[k];
   return out;
 }
-
