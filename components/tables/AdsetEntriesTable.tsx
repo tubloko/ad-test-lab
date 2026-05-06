@@ -284,13 +284,21 @@ function EntryRow({
 
   // Sync external entry changes — including the first appearance after
   // a save promotes this row from extra to saved — without clobbering
-  // the user's in-flight typing. dirtyFieldsOnly preserves any field
-  // the user has changed since the last reconciliation.
+  // the user's in-flight typing. dirtyFieldsOnly compares against the
+  // PREVIOUS baseline (the last reconciled snapshot, or the empty draft
+  // on first appearance) so that:
+  //   - on first mount with entry already saved → prev matches old
+  //     baseline, dirty is {}, draft adopts entry in full
+  //   - on extras→saved transition where the user typed → user's changes
+  //     are preserved over the saved values
+  //   - on subsequent saved→saved updates → only fields the user touched
+  //     since the last sync stay dirty
   useEffect(() => {
     if (!entry) return;
     const next = toDraft(entry);
+    const previousInitial = initialRef.current;
     initialRef.current = next;
-    setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, next) }));
+    setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, previousInitial) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     entry?.spend,
