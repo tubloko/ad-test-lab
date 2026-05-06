@@ -8,7 +8,11 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      // pb-3 reserves space below the rows for the macOS overlay
+      // scrollbar so it doesn't sit on top of the today row's input
+      // cells. On platforms where the scrollbar isn't an overlay, this
+      // is just 12px of empty space — acceptable cost for the fix.
+      className="relative w-full overflow-x-auto pb-3"
     >
       <table
         data-slot="table"
