@@ -37,21 +37,43 @@ CONTEXT YOU UNDERSTAND BY DEFAULT:
 
 DIAGNOSTIC FRAMEWORK — work top to bottom, first match wins:
 
-1. INSUFFICIENT DATA
-   Spend < 1.5x targetCPA, OR days < 3, OR clicks < 100.
-   Don't diagnose. Tell user to wait. Be specific about what threshold to hit.
+STEP 0: DATA MATURITY CHECK.
 
-2. CPA WAY ABOVE TARGET WITH HEALTHY FUNNEL
+The user prompt opens with a DATA MATURITY block that ends in either "DATA IS EARLY-STAGE" or "DATA IS SUFFICIENT". You MUST always respond — never refuse, never tell the user to come back later without saying anything else.
+
+If DATA IS EARLY-STAGE → switch to ORIENTATION MODE:
+
+- Don't issue a verdict ("kill", "fix offer", etc.) — too early.
+- Reference what the data shows so far in concrete numbers.
+- Identify any EARLY-STAGE signals worth noting:
+  • CTR is the first reliable signal. If CTR is already trending healthy (>1.5%), say so. If it's catastrophically low (<0.5%), flag it as concerning even on day 1.
+  • Click count vs spend ratio shows whether Meta is delivering at expected CPC.
+  • LPV/Clicks rate, if any data, hints at whether the page loads and matches the ad.
+- Tell the user what to watch for over the next 2-3 days:
+  • CTR holding above 1.5% by day 3
+  • At least 30-50 ATCs accumulating by day 4-5
+  • CPC stable, not creeping up
+- Tell them when to come back for a full diagnosis (a specific threshold, e.g. "when you hit 100+ clicks or day 4").
+
+For the JSON output in ORIENTATION MODE:
+- summary: orientation message with current data + what to watch (3-5 sentences).
+- primaryIssue: "Too early to diagnose — orientation read only" (literal), OR a similar early-stage observation if there's one clear signal already (e.g. "Early CTR signal looks weak").
+- recommendedAction: "Wait until X. Watch for Y. If Z, that's a red flag." with specific milestones and numbers from this campaign's targets.
+- confidence: always "low" in orientation mode.
+
+If DATA IS SUFFICIENT → proceed with the full DIAGNOSTIC FRAMEWORK below.
+
+1. CPA WAY ABOVE TARGET WITH HEALTHY FUNNEL
    CPA > 2x target AND CTR healthy AND ATC% healthy AND IC% healthy AND Purchase% healthy.
    This means the product itself is not converting at the price point, OR the audience is too cold for the ask, OR the AOV doesn't support the spend.
    This is a PRODUCT/PRICING/MARKET problem, not a creative or LP problem. Tell them to either lower price, raise AOV via upsells/bundles, or kill it. Don't pretend creative tweaks will fix this.
 
-3. LOW CTR (the creative isn't working)
+2. LOW CTR (the creative isn't working)
    CTR < 1.5% for cold traffic on dropshipping products.
    Diagnosis: hook, opening 3 seconds of video, or static visual is not stopping the scroll. Could also be wrong audience.
    Action: rewrite the hook with curiosity gap or problem-statement opening. Test 3 new creative angles in fresh ad sets. NOT "improve the landing page" — they haven't even seen it yet.
 
-4. HEALTHY CTR BUT LOW LPV/CLICKS
+3. HEALTHY CTR BUT LOW LPV/CLICKS
    CTR > 1.5% but LPV/Clicks < 70%.
    Real causes (in order of likelihood):
    - Pixel not firing or misconfigured (most common — check Events Manager)
@@ -60,7 +82,7 @@ DIAGNOSTIC FRAMEWORK — work top to bottom, first match wins:
    - Redirect chain breaking
    This is rarely a "real" funnel problem. It's almost always tracking or technical. Tell them to fix tracking before judging anything else.
 
-5. HEALTHY CTR + HEALTHY LPV BUT LOW ATC% — THE MOST COMMON FAILURE MODE
+4. HEALTHY CTR + HEALTHY LPV BUT LOW ATC% — THE MOST COMMON FAILURE MODE
    CTR > 1.5%, LPV/Clicks > 70%, but ATC/LPV < 4-5%.
    This is where most diagnoses go wrong. Three distinct causes, ranked by frequency:
 
@@ -82,7 +104,7 @@ DIAGNOSTIC FRAMEWORK — work top to bottom, first match wins:
 
    IMPORTANT: when CTR is HIGH (>2.5%) and ATC% is VERY LOW (<3%), default diagnosis should be (a) mismatch, NOT (c) LP weakness. High CTR proves the creative attracts; low ATC% proves the post-click expectation breaks. Only fall back to (c) if user can confirm creative and LP are aligned.
 
-6. HEALTHY ATC BUT LOW IC/ATC
+5. HEALTHY ATC BUT LOW IC/ATC
    ATC > healthy but IC/ATC < 50%.
    Causes:
    - Shipping cost shock revealed at cart (most common)
@@ -91,7 +113,7 @@ DIAGNOSTIC FRAMEWORK — work top to bottom, first match wins:
    - Required information feels invasive (phone, etc.)
    Action: free shipping above threshold, guest checkout, simplify cart, remove friction. Test cart flow on mobile yourself.
 
-7. HEALTHY IC BUT LOW PURCHASES/IC
+6. HEALTHY IC BUT LOW PURCHASES/IC
    IC > healthy but Purchases/IC < 50%.
    Causes:
    - Payment options too narrow (no PayPal, no Apple Pay)
@@ -100,7 +122,7 @@ DIAGNOSTIC FRAMEWORK — work top to bottom, first match wins:
    - Failed payment processor
    Action: add payment methods, add trust signals at checkout, show clear total earlier in flow.
 
-8. EVERYTHING HEALTHY, CPA AT/NEAR TARGET
+7. EVERYTHING HEALTHY, CPA AT/NEAR TARGET
    This is a CONTINUE. Don't manufacture problems. Tell them what's working. Suggest scaling carefully (raise budget 20% per 2-3 days), watch for fatigue (CTR decline, frequency >2.5).
 
 ANTI-PATTERNS TO AVOID:
@@ -146,6 +168,38 @@ Respond with ONLY valid JSON matching this schema. No markdown fences, no preamb
 const usd = (n: number) => `$${n.toFixed(2)}`;
 const pct = (n: number) => `${n.toFixed(1)}%`;
 
+// Thresholds that flip the diagnostic prompt into ORIENTATION MODE. Mirror
+// the rule engine's data-sufficiency thresholds so the AI's framing matches
+// what the rule engine already returned.
+const EARLY_STAGE_MAX_DAYS = 3;
+const EARLY_STAGE_MAX_CLICKS = 100;
+const EARLY_STAGE_SPEND_MULT = 1.5;
+
+export function isEarlyStage(input: VerdictInput): boolean {
+  if (input.daysActive < EARLY_STAGE_MAX_DAYS) return true;
+  if (input.totalClicks < EARLY_STAGE_MAX_CLICKS) return true;
+  if (input.targetCPA > 0 && input.totalSpend < EARLY_STAGE_SPEND_MULT * input.targetCPA) return true;
+  return false;
+}
+
+function dataMaturityBlock(input: VerdictInput): string {
+  const earlyStage = isEarlyStage(input);
+  const spendVsTarget =
+    input.targetCPA > 0
+      ? `${(input.totalSpend / input.targetCPA).toFixed(2)}× targetCPA`
+      : 'n/a';
+  const flag = earlyStage
+    ? '→ DATA IS EARLY-STAGE. Provide an orientation read, not a diagnosis.'
+    : '→ DATA IS SUFFICIENT. Provide a full diagnosis.';
+  return [
+    'DATA MATURITY:',
+    `Days running: ${input.daysActive}`,
+    `Total clicks: ${input.totalClicks}`,
+    `Spend vs target: ${spendVsTarget}`,
+    flag,
+  ].join('\n');
+}
+
 function feesHaveValue(b: ProfitBreakdown): boolean {
   return b.transactionFees > 0 || b.shippingTotal > 0 || b.expectedRefunds > 0;
 }
@@ -184,10 +238,17 @@ export function buildDiagnosisPrompt(ctx: PromptContext): string {
           .join('\n')}\n`
       : '';
 
+  // CPA is Infinity when no orders have come in yet. Don't render
+  // "$Infinity" — Claude reads it but it's noisy. Orientation mode
+  // already explains that no orders means it's too early to compute CPA.
+  const cpaLabel = Number.isFinite(m.cpa) ? usd(m.cpa) : 'n/a (no orders yet)';
+
   return `Product: ${productName}
 Campaign: ${campaignName}
 Target CPA: ${usd(input.targetCPA)}
 Date range: ${fromLabel} to ${dateRange.to} (${input.daysActive} days)
+
+${dataMaturityBlock(input)}
 
 TOTALS:
 - Spend: ${usd(input.totalSpend)}
@@ -205,7 +266,7 @@ FUNNEL:
 - Orders: ${input.totalOrders} (${pct(m.purchaseRate)} of IC)
 
 KEY METRICS:
-- CPA: ${usd(m.cpa)} (target: ${usd(input.targetCPA)})
+- CPA: ${cpaLabel} (target: ${usd(input.targetCPA)})
 - ROAS: ${m.roas.toFixed(2)}
 ${adsetBlock}
 RULE ENGINE VERDICT: ${ruleResult.verdict}

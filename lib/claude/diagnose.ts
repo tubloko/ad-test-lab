@@ -42,7 +42,19 @@ export async function generateDiagnosis(ctx: PromptContext): Promise<DiagnoseRes
   });
 
   const text = extractText(response);
-  const output = parseAndValidate(text);
+  let output: DiagnosisOutput;
+  try {
+    output = parseAndValidate(text);
+  } catch (err) {
+    // Surface the raw model output when parsing/validation fails so we
+    // can tell at a glance whether Claude returned bad JSON or content
+    // that violated our zod bounds.
+    console.error('[diagnose] claude output parse/validate failed', {
+      rawText: text.slice(0, 1500),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
   const costUsd = estimateCostUsd(inputTokens, outputTokens);
 
   return { output, usage: { inputTokens, outputTokens, costUsd } };

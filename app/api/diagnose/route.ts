@@ -27,35 +27,45 @@ const VerdictTypeSchema = z.enum([
   'CONTINUE',
 ]);
 
+// Day-1 / thin-data payloads are valid input. Counts can legitimately be 0
+// (no ATCs yet, no orders yet, etc.) so we only constrain that values are
+// numbers and non-negative — never .min(1) or .positive() on counters.
 const VerdictInputSchema = z.object({
-  totalSpend: z.number(),
-  totalRevenue: z.number(),
-  totalOrders: z.number(),
-  totalCOGS: z.number(),
-  totalClicks: z.number(),
-  totalLPV: z.number(),
-  totalATC: z.number(),
-  totalIC: z.number(),
-  daysActive: z.number(),
-  targetCPA: z.number(),
-  transactionFeePercent: z.number().optional(),
-  transactionFeeFixed: z.number().optional(),
-  shippingCost: z.number().optional(),
-  refundRate: z.number().optional(),
+  totalSpend: z.number().min(0),
+  totalRevenue: z.number().min(0),
+  totalOrders: z.number().int().min(0),
+  totalCOGS: z.number().min(0),
+  totalClicks: z.number().int().min(0),
+  totalLPV: z.number().int().min(0),
+  totalATC: z.number().int().min(0),
+  totalIC: z.number().int().min(0),
+  daysActive: z.number().int().min(1),
+  targetCPA: z.number().positive(),
+  transactionFeePercent: z.number().min(0).optional(),
+  transactionFeeFixed: z.number().min(0).optional(),
+  shippingCost: z.number().min(0).optional(),
+  refundRate: z.number().min(0).optional(),
 });
+
+// CPA is Infinity when totalOrders === 0 (legitimate on day 1). JSON.stringify
+// turns Infinity into null on the wire, so the schema must accept null and
+// rehydrate it to Infinity for the rest of the pipeline.
+const CpaSchema = z
+  .union([z.number(), z.null()])
+  .transform((v): number => (v === null ? Number.POSITIVE_INFINITY : v));
 
 const VerdictResultSchema = z.object({
   verdict: VerdictTypeSchema,
   reason: z.string(),
   metrics: z.object({
-    cpa: z.number(),
-    roas: z.number(),
+    cpa: CpaSchema,
+    roas: z.number().min(0),
     profit: z.number(),
-    ctr: z.number(),
-    lpvRate: z.number(),
-    atcRate: z.number(),
-    icRate: z.number(),
-    purchaseRate: z.number(),
+    ctr: z.number().min(0),
+    lpvRate: z.number().min(0),
+    atcRate: z.number().min(0),
+    icRate: z.number().min(0),
+    purchaseRate: z.number().min(0),
   }),
   triggeredRule: z.string(),
 });
@@ -83,7 +93,12 @@ const BodySchema = z.object({
   productName: z.string(),
   campaignName: z.string(),
   dateRange: z.object({
-    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    // `from` is nullable so a campaign with a single day of data (no
+    // earlier date to anchor from) still validates.
+    from: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   }),
   input: VerdictInputSchema,
@@ -271,7 +286,10 @@ export async function POST(req: NextRequest) {
       productId,
       campaignId,
       inputHash,
-      dateRange,
+      // Diagnosis records require a string `from`. When the request omits
+      // it (single-day window with no anchor), fall back to `to` so the
+      // cache row still satisfies the stored schema.
+      dateRange: { from: dateRange.from ?? dateRange.to, to: dateRange.to },
       ruleVerdict: ruleResult.verdict,
       aiSummary: generation.output.summary,
       primaryIssue: generation.output.primaryIssue,

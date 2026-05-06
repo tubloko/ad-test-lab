@@ -58,6 +58,14 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT).toMatch(/ANTI-PATTERNS/);
   });
 
+  it('describes ORIENTATION MODE for early-stage data', () => {
+    expect(SYSTEM_PROMPT).toMatch(/ORIENTATION MODE/);
+    expect(SYSTEM_PROMPT).toMatch(/DATA IS EARLY-STAGE/);
+    expect(SYSTEM_PROMPT).toMatch(/DATA IS SUFFICIENT/);
+    // Insurance against the old "refuse and tell user to wait" behavior.
+    expect(SYSTEM_PROMPT).toMatch(/never refuse/);
+  });
+
   it('places the JSON schema at the end of the prompt', () => {
     // The schema block is what the model reads last and follows when
     // emitting output — keep it as the closing instruction.
@@ -171,5 +179,73 @@ describe('buildDiagnosisPrompt', () => {
       profitBreakdown: baseProfit,
     });
     expect(prompt).toContain('Date range: start to 2026-05-03');
+  });
+
+  describe('DATA MATURITY block', () => {
+    const promptFor = (input: VerdictInput) =>
+      buildDiagnosisPrompt({
+        productName: 'X',
+        campaignName: 'C',
+        dateRange: { from: '2026-04-30', to: '2026-05-03' },
+        input,
+        ruleResult,
+        profitBreakdown: computeProfitWithFees({
+          revenue: input.totalRevenue,
+          spend: input.totalSpend,
+          cogs: input.totalCOGS,
+          orders: input.totalOrders,
+        }),
+      });
+
+    it('flags DATA IS EARLY-STAGE when daysActive < 3', () => {
+      const prompt = promptFor({ ...baseInput, daysActive: 2 });
+      expect(prompt).toContain('DATA MATURITY:');
+      expect(prompt).toContain('DATA IS EARLY-STAGE');
+      expect(prompt).not.toContain('DATA IS SUFFICIENT');
+    });
+
+    it('flags DATA IS EARLY-STAGE when totalClicks < 100', () => {
+      const prompt = promptFor({ ...baseInput, totalClicks: 50 });
+      expect(prompt).toContain('DATA IS EARLY-STAGE');
+    });
+
+    it('flags DATA IS EARLY-STAGE when totalSpend < 1.5x targetCPA', () => {
+      const prompt = promptFor({
+        ...baseInput,
+        totalSpend: 20,
+        targetCPA: 18,
+      });
+      expect(prompt).toContain('DATA IS EARLY-STAGE');
+    });
+
+    it('flags DATA IS SUFFICIENT when all thresholds met', () => {
+      // baseInput: 4d, 800 clicks, $240 spend vs $18 target = 13.33x
+      const prompt = promptFor(baseInput);
+      expect(prompt).toContain('DATA IS SUFFICIENT');
+      expect(prompt).not.toContain('DATA IS EARLY-STAGE');
+    });
+
+    it('renders the spend-vs-target ratio numerically', () => {
+      const prompt = promptFor({ ...baseInput, totalSpend: 27, targetCPA: 18 });
+      // 27 / 18 = 1.50× — exactly the threshold; below 1.5x triggers early.
+      // We only assert the label format here.
+      expect(prompt).toMatch(/Spend vs target: \d+\.\d{2}× targetCPA/);
+    });
+  });
+
+  it('renders CPA as "n/a (no orders yet)" when CPA is not finite', () => {
+    const prompt = buildDiagnosisPrompt({
+      productName: 'X',
+      campaignName: 'C',
+      dateRange: { from: '2026-04-30', to: '2026-05-03' },
+      input: baseInput,
+      ruleResult: {
+        ...ruleResult,
+        metrics: { ...ruleResult.metrics, cpa: Number.POSITIVE_INFINITY },
+      },
+      profitBreakdown: baseProfit,
+    });
+    expect(prompt).toContain('CPA: n/a (no orders yet)');
+    expect(prompt).not.toContain('$Infinity');
   });
 });

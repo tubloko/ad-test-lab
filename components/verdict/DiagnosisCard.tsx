@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { VerdictBadge } from '@/components/verdict/VerdictBadge';
 import { cn } from '@/lib/utils';
 import { formatRelative } from '@/lib/utils/formatRelative';
+import { isOrientationDiagnosis } from '@/lib/claude/orientation';
 import type { Diagnosis } from '@/types/diagnosis';
 
 interface DiagnosisCardProps {
@@ -53,6 +54,11 @@ export function DiagnosisCard({
             <div className="rounded-md border border-warning-border/40 bg-warning-bg/30 px-3 py-2 text-caption text-warning-text">
               Data has changed since this diagnosis was generated.
             </div>
+          )}
+          {isOrientationDiagnosis(diagnosis) && (
+            <p className="text-caption italic text-text-muted">
+              Orientation read — too early for a final verdict.
+            </p>
           )}
           <div className="space-y-1">
             <p className="text-caption font-medium text-text-muted">Summary</p>
