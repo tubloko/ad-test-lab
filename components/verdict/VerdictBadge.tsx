@@ -48,7 +48,7 @@ export function VerdictBadge({ verdict, size = 'md', className }: VerdictBadgePr
   return (
     <span
       className={cn(
-        'inline-flex items-center justify-center rounded-full border font-medium',
+        'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full border font-medium',
         TONE_CLASS[tone],
         SIZE_CLASS[size],
         className,
