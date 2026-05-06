@@ -5,10 +5,11 @@ import { Sparkles, AlertTriangle, RotateCw, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useDiagnose } from '@/hooks/useDiagnose';
 import { useCampaignDiagnoses } from '@/hooks/useCampaignDiagnoses';
 import { hashInputClient } from '@/lib/utils/hashClient';
-import { DiagnosisFullView } from './DiagnosisFullView';
+import { DiagnosisCard } from './DiagnosisCard';
 import { PreviousDiagnosesList } from './PreviousDiagnosesList';
 import type { VerdictInput, VerdictResult } from '@/lib/verdict-engine';
 import type { ProfitBreakdown } from '@/lib/metrics/profitWithFees';
@@ -33,6 +34,7 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
   );
   const { diagnose, loading: generating, error } = useDiagnose();
   const [currentInputHash, setCurrentInputHash] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const fromDate = props.dateRange.from;
 
@@ -62,8 +64,12 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
     latest !== null &&
     currentInputHash !== null &&
     latest.inputHash !== currentInputHash;
+  const sameAsLatest =
+    latest !== null &&
+    currentInputHash !== null &&
+    latest.inputHash === currentInputHash;
 
-  const onGenerate = async () => {
+  const runDiagnose = async (force: boolean) => {
     if (!fromDate) {
       toast.error('Pick a date range with at least one day of data first.');
       return;
@@ -78,6 +84,7 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
       ruleResult: props.ruleResult,
       profitBreakdown: props.profitBreakdown,
       adsetBreakdown: props.adsetBreakdown,
+      force,
     });
     if (res?.cached) toast.success('Showing cached analysis from earlier');
     else if (res) toast.success('Diagnosis ready');
@@ -85,8 +92,26 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
     // automatically, no manual refetch needed.
   };
 
+  const onGenerateClick = () => {
+    if (sameAsLatest) {
+      setConfirmOpen(true);
+      return;
+    }
+    void runDiagnose(false);
+  };
+
+  const onConfirmGenerate = async () => {
+    await runDiagnose(true);
+  };
+
   const isBudgetBlocked = error?.kind === 'budget_exceeded';
   const showError = error !== null && !isBudgetBlocked;
+  // The button stays visible at all times once we know there's data to
+  // diagnose — same-data clicks open a confirmation, fresh-data clicks go
+  // straight through.
+  const showGenerateButton =
+    !loadingDiagnoses && !isBudgetBlocked && fromDate !== null;
+  const generateLabel = latest ? 'Generate new' : 'Get AI diagnosis';
 
   return (
     <section className="rounded-lg border border-border bg-surface p-6 space-y-4">
@@ -101,8 +126,13 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
           </p>
         </div>
 
-        {!loadingDiagnoses && !latest && !isBudgetBlocked && (
-          <Button type="button" size="sm" onClick={onGenerate} disabled={generating}>
+        {showGenerateButton && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={onGenerateClick}
+            disabled={generating}
+          >
             {generating ? (
               <>
                 <RotateCw className="size-4 animate-spin" />
@@ -111,7 +141,7 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
             ) : (
               <>
                 <Sparkles className="size-4" />
-                Get AI diagnosis
+                {generateLabel}
               </>
             )}
           </Button>
@@ -119,11 +149,7 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
       </header>
 
       {loadingDiagnoses && (
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-        </div>
+        <Skeleton className="h-16 w-full rounded-lg" />
       )}
 
       {!loadingDiagnoses && !latest && !showError && !isBudgetBlocked && (
@@ -135,34 +161,12 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
 
       {!loadingDiagnoses && latest && (
         <div className="space-y-4">
-          {dataDrifted && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning-border/40 bg-warning-bg/10 px-3 py-2">
-              <p className="text-caption text-warning-text">
-                Data has changed since this diagnosis was generated.
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={onGenerate}
-                disabled={generating}
-              >
-                {generating ? (
-                  <>
-                    <RotateCw className="size-4 animate-spin" />
-                    Refreshing…
-                  </>
-                ) : (
-                  <>
-                    <RotateCw className="size-4" />
-                    Refresh diagnosis
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-
-          <DiagnosisFullView diagnosis={latest} />
+          <DiagnosisCard
+            key={latest.id}
+            diagnosis={latest}
+            defaultExpanded={false}
+            showStaleWarning={dataDrifted}
+          />
 
           <PreviousDiagnosesList
             diagnoses={previous}
@@ -188,7 +192,7 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
             type="button"
             size="sm"
             variant="outline"
-            onClick={onGenerate}
+            onClick={onGenerateClick}
             disabled={generating}
           >
             <RotateCw className="size-4" />
@@ -210,6 +214,17 @@ export function AIDiagnosisPanel(props: AIDiagnosisPanelProps) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Same data, likely same answer"
+        description="Your data hasn't changed since the last diagnosis. Claude will likely return a similar result. Generate anyway?"
+        confirmLabel="Generate anyway"
+        cancelLabel="Cancel"
+        confirmVariant="default"
+        onConfirm={onConfirmGenerate}
+      />
     </section>
   );
 }

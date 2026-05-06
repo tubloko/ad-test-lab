@@ -90,6 +90,9 @@ const BodySchema = z.object({
   ruleResult: VerdictResultSchema,
   profitBreakdown: ProfitBreakdownSchema,
   adsetBreakdown: z.array(AdsetSummarySchema).optional(),
+  // When true, bypass the cache lookup and always pay Anthropic. The user
+  // confirmed they want a fresh take even though the inputs are identical.
+  force: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -143,14 +146,16 @@ export async function POST(req: NextRequest) {
     dateRange,
     adsetBreakdown: body.adsetBreakdown ?? null,
   });
-  try {
-    const cached = await getCachedDiagnosis(uid, productId, campaignId, inputHash);
-    if (cached) {
-      return NextResponse.json({ diagnosis: cached, cached: true });
+  if (!body.force) {
+    try {
+      const cached = await getCachedDiagnosis(uid, productId, campaignId, inputHash);
+      if (cached) {
+        return NextResponse.json({ diagnosis: cached, cached: true });
+      }
+    } catch (err) {
+      console.error('[diagnose] cache lookup failed', { uid, productId, campaignId, err });
+      // fall through — we'd rather generate fresh than 500
     }
-  } catch (err) {
-    console.error('[diagnose] cache lookup failed', { uid, productId, campaignId, err });
-    // fall through — we'd rather generate fresh than 500
   }
 
   // 4. Budget cap (global, monthly)

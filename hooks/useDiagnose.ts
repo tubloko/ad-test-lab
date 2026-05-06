@@ -36,6 +36,8 @@ export interface DiagnosePayload {
   ruleResult: VerdictResult;
   profitBreakdown: ProfitBreakdown;
   adsetBreakdown?: AdsetSummary[];
+  /** Bypass the server-side cache and always generate a fresh diagnosis. */
+  force?: boolean;
 }
 
 export interface DiagnoseSuccess {

@@ -17,6 +17,9 @@ interface ConfirmDialogProps {
   title: string;
   description: string;
   confirmLabel?: string;
+  cancelLabel?: string;
+  /** Visual weight of the confirm button. Defaults to destructive. */
+  confirmVariant?: 'destructive' | 'default';
   onConfirm: () => Promise<void> | void;
 }
 
@@ -26,6 +29,8 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = 'Delete',
+  cancelLabel = 'Cancel',
+  confirmVariant = 'destructive',
   onConfirm,
 }: ConfirmDialogProps) {
   const [busy, setBusy] = useState(false);
@@ -54,11 +59,11 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             disabled={busy}
           >
-            Cancel
+            {cancelLabel}
           </Button>
           <Button
             type="button"
-            variant="destructive"
+            variant={confirmVariant}
             onClick={handleConfirm}
             disabled={busy}
           >
