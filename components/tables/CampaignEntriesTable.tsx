@@ -160,40 +160,35 @@ export function CampaignEntriesTable({
 
   const hasHistorical = historicalRowSpecs.length > 0;
 
+  // Single component for both unsaved and saved rows, keyed by date.
+  // Splitting them caused the input to remount on the first save (different
+  // component types behind the extras→saved transition swap), which is
+  // what made focus jump after the first character.
   const renderRow = (r: Row, idx: number) => {
-    if (r.kind === 'extra') {
-      return (
-        <ExtraRowComponent
-          key={r.tempId}
-          row={idx}
-          today={today}
-          date={r.date}
-          adsetSpendSum={adsetSpendByDate.get(r.date) ?? 0}
-          targetCPA={targetCPA}
-          productFees={productFees}
-          grid={grid}
-          // Auto-derived rows (today, adset-only) re-appear after a local
-          // removal — hide the trash so users don't think it's doing nothing.
-          // User-backfilled rows have UUID tempIds.
-          removable={
-            !r.tempId.startsWith('today-') && !r.tempId.startsWith('auto-')
-          }
-          onSaveEntry={onSaveEntry}
-          onRemoveExtra={() => removeExtra(r.tempId)}
-        />
-      );
-    }
+    const isExtra = r.kind === 'extra';
+    // Auto-derived rows (today, adset-only) re-appear after a local
+    // removal — hide the trash so users don't think it's doing nothing.
+    // User-backfilled rows have UUID tempIds.
+    const removable =
+      isExtra &&
+      !r.tempId.startsWith('today-') &&
+      !r.tempId.startsWith('auto-');
+    const adsetSpendSum =
+      r.kind === 'saved' ? r.entry.adsetSpendSum : adsetSpendByDate.get(r.date) ?? 0;
     return (
-      <SavedEntryRow
+      <EntryRow
         key={r.date}
         row={idx}
         today={today}
-        entry={r.entry}
+        date={r.date}
+        entry={r.kind === 'saved' ? r.entry : undefined}
+        adsetSpendSum={adsetSpendSum}
         targetCPA={targetCPA}
         productFees={productFees}
         grid={grid}
         onSaveEntry={onSaveEntry}
         onDeleteRequest={() => setPendingDelete(r.date)}
+        onRemoveExtra={isExtra && removable ? () => removeExtra(r.tempId) : undefined}
       />
     );
   };
@@ -223,7 +218,7 @@ export function CampaignEntriesTable({
       </div>
 
       {!hasHistorical && (
-        <p className="text-caption text-text-muted">
+        <p className="text-caption text-text-subtle">
           Have historical data? Use{' '}
           <button
             type="button"
@@ -259,36 +254,53 @@ export function CampaignEntriesTable({
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-interface ExtraRowProps {
+interface EntryRowProps {
   row: number;
   today: string;
   date: string;
+  /** Saved Firestore entry for this date. Undefined while still a local draft. */
+  entry: EnrichedCampaignEntry | undefined;
+  /** Used for the auto-fill spend display when the row hasn't been saved yet. */
   adsetSpendSum: number;
   targetCPA: number;
   productFees?: ProductFees;
   grid: ReturnType<typeof useGridNavigation>;
-  removable: boolean;
   onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
-  onRemoveExtra: () => void;
+  onDeleteRequest: () => void;
+  /** Provided only when this row started life as a removable extra. */
+  onRemoveExtra?: () => void;
 }
 
-function ExtraRowComponent({
+function EntryRow({
   row,
   today,
   date,
+  entry,
   adsetSpendSum,
   targetCPA,
   productFees,
   grid,
-  removable,
   onSaveEntry,
+  onDeleteRequest,
   onRemoveExtra,
-}: ExtraRowProps) {
-  const [draft, setDraft] = useState<RowDraft>(EMPTY_DRAFT);
+}: EntryRowProps) {
+  const [draft, setDraft] = useState<RowDraft>(() => (entry ? toDraft(entry) : EMPTY_DRAFT));
   const initialRef = useRef<RowDraft>(draft);
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync external entry changes — including the first appearance after
+  // a save promotes this row from extra to saved — without clobbering
+  // the user's in-flight typing. dirtyFieldsOnly preserves any field
+  // the user has changed since the last reconciliation.
+  useEffect(() => {
+    if (!entry) return;
+    const next = toDraft(entry);
+    initialRef.current = next;
+    setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, next) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry?.spend, entry?.revenue, entry?.orders, entry?.cogs, entry?.date]);
 
   useEffect(
     () => () => {
@@ -298,7 +310,8 @@ function ExtraRowComponent({
     [],
   );
 
-  const adsetWins = adsetSpendSum > 0;
+  const effectiveAdsetSpendSum = entry ? entry.adsetSpendSum : adsetSpendSum;
+  const adsetWins = effectiveAdsetSpendSum > 0;
 
   const flushSave = async (next: RowDraft) => {
     setStatus('saving');
@@ -340,7 +353,7 @@ function ExtraRowComponent({
   const orders = Math.round(parseNum(draft.orders));
   const revenue = parseNum(draft.revenue);
   const cogs = parseNum(draft.cogs);
-  const spend = adsetWins ? adsetSpendSum : parseNum(draft.spend);
+  const spend = adsetWins ? effectiveAdsetSpendSum : parseNum(draft.spend);
   const cpaValue = cpa(spend, orders);
   const roasValue = roas(revenue, spend);
   const profitValue = rowProfit(revenue, spend, cogs, orders, productFees);
@@ -352,13 +365,43 @@ function ExtraRowComponent({
     draft.orders === '' &&
     draft.cogs === '';
 
+  // Saved → delete button. Unsaved-and-removable → remove button.
+  // Today (saved or unsaved) and auto-derived extras → no action button.
+  let actionsCell: React.ReactNode = null;
+  if (entry && !isToday) {
+    actionsCell = (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`Delete entry for ${date}`}
+        onClick={onDeleteRequest}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+    );
+  } else if (!entry && onRemoveExtra) {
+    actionsCell = (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Remove this row"
+        title="Remove this row"
+        onClick={onRemoveExtra}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+    );
+  }
+
   return (
     <TableRow className={cn(isToday && 'bg-elevated/40')}>
       <TableCell className="text-mono text-text">
         <DateCell
           date={date}
           today={today}
-          showDraftPill={!isToday && isUntouched}
+          showDraftPill={!entry && !isToday && isUntouched}
         />
       </TableCell>
 
@@ -367,7 +410,7 @@ function ExtraRowComponent({
           <SpendOrInput
             field={field}
             adsetWins={adsetWins}
-            adsetSpendSum={adsetSpendSum}
+            adsetSpendSum={effectiveAdsetSpendSum}
             value={draft[field]}
             inputRef={grid.getRef(row, i)}
             onChange={(v) => handleChange(field, v)}
@@ -408,180 +451,7 @@ function ExtraRowComponent({
         <SaveIndicator status={status} />
       </TableCell>
 
-      <TableCell className="w-10 text-right">
-        {removable && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Remove this row"
-            title="Remove this row"
-            onClick={onRemoveExtra}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        )}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-interface SavedEntryRowProps {
-  row: number;
-  today: string;
-  entry: EnrichedCampaignEntry;
-  targetCPA: number;
-  productFees?: ProductFees;
-  grid: ReturnType<typeof useGridNavigation>;
-  onSaveEntry: (date: string, values: CampaignEntryInput) => Promise<void>;
-  onDeleteRequest: () => void;
-}
-
-function SavedEntryRow({
-  row,
-  today,
-  entry,
-  targetCPA,
-  productFees,
-  grid,
-  onSaveEntry,
-  onDeleteRequest,
-}: SavedEntryRowProps) {
-  const [draft, setDraft] = useState<RowDraft>(() => toDraft(entry));
-  const initialRef = useRef<RowDraft>(draft);
-  const [status, setStatus] = useState<SaveStatus>('idle');
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const next = toDraft(entry);
-    initialRef.current = next;
-    setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry.spend, entry.revenue, entry.orders, entry.cogs, entry.date]);
-
-  useEffect(
-    () => () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (fadeTimer.current) clearTimeout(fadeTimer.current);
-    },
-    [],
-  );
-
-  const adsetWins = entry.adsetSpendSum > 0;
-
-  const flushSave = async (next: RowDraft) => {
-    setStatus('saving');
-    try {
-      await onSaveEntry(entry.date, {
-        spend: parseNum(next.spend),
-        revenue: parseNum(next.revenue),
-        orders: Math.round(parseNum(next.orders)),
-        cogs: parseNum(next.cogs),
-        spendOverride: false,
-      });
-      setStatus('saved');
-      if (fadeTimer.current) clearTimeout(fadeTimer.current);
-      fadeTimer.current = setTimeout(() => setStatus('idle'), 1200);
-    } catch {
-      setStatus('error');
-    }
-  };
-
-  const scheduleSave = (next: RowDraft) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void flushSave(next), 300);
-  };
-
-  const handleChange = (field: EditableField, raw: string) => {
-    if (field === 'spend' && adsetWins) return;
-    const next = { ...draft, [field]: raw };
-    setDraft(next);
-    scheduleSave(next);
-  };
-
-  const handleBlur = () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    void flushSave(draft);
-  };
-
-  const handleEsc = () => setDraft(initialRef.current);
-
-  const orders = Math.round(parseNum(draft.orders));
-  const revenue = parseNum(draft.revenue);
-  const cogs = parseNum(draft.cogs);
-  const spend = adsetWins ? entry.adsetSpendSum : parseNum(draft.spend);
-  const cpaValue = cpa(spend, orders);
-  const roasValue = roas(revenue, spend);
-  const profitValue = rowProfit(revenue, spend, cogs, orders, productFees);
-
-  const isToday = entry.date === today;
-
-  return (
-    <TableRow className={cn(isToday && 'bg-elevated/40')}>
-      <TableCell className="text-mono text-text">
-        <DateCell date={entry.date} today={today} />
-      </TableCell>
-
-      {EDITABLE_COLS.map((field, i) => (
-        <TableCell key={field} className="text-right">
-          <SpendOrInput
-            field={field}
-            adsetWins={adsetWins}
-            adsetSpendSum={entry.adsetSpendSum}
-            value={draft[field]}
-            inputRef={grid.getRef(row, i)}
-            onChange={(v) => handleChange(field, v)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') handleEsc();
-              grid.onKeyDown(row, i)(e);
-            }}
-            aria-label={`${field} on ${entry.date}`}
-            className="h-8 w-24 px-2 text-right text-mono"
-          />
-        </TableCell>
-      ))}
-
-      <TableCell
-        className={cn(
-          'text-right text-mono',
-          orders > 0 ? TONE_TEXT_CLASS[cpaTone(cpaValue, targetCPA)] : 'text-text-muted',
-        )}
-      >
-        {orders > 0 ? formatCurrency(cpaValue) : '—'}
-      </TableCell>
-      <TableCell
-        className={cn(
-          'text-right text-mono',
-          spend > 0 ? TONE_TEXT_CLASS[roasTone(roasValue)] : 'text-text-muted',
-        )}
-      >
-        {spend > 0 ? roasValue.toFixed(2) : '—'}
-      </TableCell>
-      <TableCell
-        className={cn('text-right text-mono', TONE_TEXT_CLASS[profitTone(profitValue)])}
-      >
-        {formatCurrency(profitValue)}
-      </TableCell>
-
-      <TableCell className="w-8 text-center">
-        <SaveIndicator status={status} />
-      </TableCell>
-
-      <TableCell className="w-10 text-right">
-        {!isToday && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={`Delete entry for ${entry.date}`}
-            onClick={onDeleteRequest}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        )}
-      </TableCell>
+      <TableCell className="w-10 text-right">{actionsCell}</TableCell>
     </TableRow>
   );
 }

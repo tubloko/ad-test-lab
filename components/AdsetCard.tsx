@@ -16,6 +16,7 @@ import { EditAdsetDialog } from '@/components/forms/EditAdsetDialog';
 import { useAdsetEntries } from '@/hooks/useAdsetEntries';
 import { useAdsetEntryMutations } from '@/hooks/useAdsetEntryMutations';
 import { useEntriesTableController } from '@/hooks/useEntriesTableController';
+import { cn } from '@/lib/utils';
 import { computeAdsetTotals } from '@/lib/metrics/adsetTotals';
 import { adsetHealth } from '@/lib/utils/adset-health';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
@@ -50,7 +51,7 @@ export function AdsetCardList({
   if (adsets.length === 0) return null;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {adsets.map((adset) => (
         <AdsetCard
           key={adset.id}
@@ -148,8 +149,19 @@ function AdsetCard({
   );
 
   return (
-    <div className="rounded-lg border border-border bg-surface">
-      <div className="flex flex-col gap-2 px-4 py-3">
+    // Visual hierarchy across multiple adsets:
+    // - hover lifts the border so the pointer-anchored card reads first
+    // - focus-within tints the border + adds a subtle primary ring so the
+    //   adset the user is actively typing into is unambiguous
+    // - transition-colors keeps both transitions soft, not jarring
+    <div
+      className={cn(
+        'rounded-lg border border-border bg-surface transition-colors',
+        'hover:border-border-strong/70',
+        'focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20',
+      )}
+    >
+      <div className="flex flex-col gap-2 px-4 py-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <AdsetHealthDot health={health} />

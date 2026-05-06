@@ -151,29 +151,24 @@ export function AdsetEntriesTable({
 
   const hasHistorical = historicalRowSpecs.length > 0;
 
+  // One component for both unsaved and saved rows, keyed by date. The
+  // alternative (separate ExtraRow / SavedRow with different keys) made
+  // the input unmount on the first save: extras→saved switches both the
+  // component type AND the React key, so focus jumped after the first
+  // character that triggered the debounced write.
   const renderRow = (r: Row, idx: number) => {
-    if (r.kind === 'extra') {
-      return (
-        <ExtraRowComponent
-          key={r.tempId}
-          row={idx}
-          today={today}
-          date={r.date}
-          grid={grid}
-          onSaveEntry={onSaveEntry}
-          onRemoveExtra={() => removeExtra(r.tempId)}
-        />
-      );
-    }
+    const isExtra = r.kind === 'extra';
     return (
-      <SavedEntryRow
+      <EntryRow
         key={r.date}
         row={idx}
         today={today}
-        entry={r.entry}
+        date={r.date}
+        entry={r.kind === 'saved' ? r.entry : undefined}
         grid={grid}
         onSaveEntry={onSaveEntry}
         onDeleteRequest={() => setPendingDelete(r.date)}
+        onRemoveExtra={isExtra ? () => removeExtra(r.tempId) : undefined}
       />
     );
   };
@@ -206,7 +201,7 @@ export function AdsetEntriesTable({
       />
 
       {!hasHistorical && (
-        <p className="px-3 pb-2 text-caption text-text-muted">
+        <p className="px-3 pb-2 text-caption text-text-subtle">
           Have historical data? Use{' '}
           <button
             type="button"
@@ -258,26 +253,55 @@ function buildPayload(next: RowDraft): AdsetEntryInput {
   };
 }
 
-function ExtraRowComponent({
-  row,
-  today,
-  date,
-  grid,
-  onSaveEntry,
-  onRemoveExtra,
-}: {
+interface EntryRowProps {
   row: number;
   today: string;
   date: string;
+  /** Saved Firestore entry for this date. Undefined while still a local draft. */
+  entry: AdsetEntry | undefined;
   grid: ReturnType<typeof useGridNavigation>;
   onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
-  onRemoveExtra: () => void;
-}) {
-  const [draft, setDraft] = useState<RowDraft>(EMPTY_DRAFT);
+  onDeleteRequest: () => void;
+  /** Provided only when this row started life as a removable extra. */
+  onRemoveExtra?: () => void;
+}
+
+function EntryRow({
+  row,
+  today,
+  date,
+  entry,
+  grid,
+  onSaveEntry,
+  onDeleteRequest,
+  onRemoveExtra,
+}: EntryRowProps) {
+  const [draft, setDraft] = useState<RowDraft>(() => (entry ? toDraft(entry) : EMPTY_DRAFT));
   const initialRef = useRef<RowDraft>(draft);
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync external entry changes — including the first appearance after
+  // a save promotes this row from extra to saved — without clobbering
+  // the user's in-flight typing. dirtyFieldsOnly preserves any field
+  // the user has changed since the last reconciliation.
+  useEffect(() => {
+    if (!entry) return;
+    const next = toDraft(entry);
+    initialRef.current = next;
+    setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, next) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    entry?.spend,
+    entry?.clicks,
+    entry?.lpv,
+    entry?.atc,
+    entry?.ic,
+    entry?.purchases,
+    entry?.ctr,
+    entry?.date,
+  ]);
 
   useEffect(
     () => () => {
@@ -317,6 +341,7 @@ function ExtraRowComponent({
 
   const handleEsc = () => setDraft(initialRef.current);
 
+  const isToday = date === today;
   const isUntouched =
     draft.spend === '' &&
     draft.clicks === '' &&
@@ -325,9 +350,39 @@ function ExtraRowComponent({
     draft.ic === '' &&
     draft.purchases === '';
 
+  // Saved → delete button. Unsaved-and-removable → remove button.
+  // Today (saved or unsaved) and auto-derived extras → no action button.
+  let actionsCell: React.ReactNode = null;
+  if (entry && !isToday) {
+    actionsCell = (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`Delete entry for ${date}`}
+        onClick={onDeleteRequest}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+    );
+  } else if (!entry && !isToday && onRemoveExtra) {
+    actionsCell = (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Remove this row"
+        title="Remove this row"
+        onClick={onRemoveExtra}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+    );
+  }
+
   return (
     <Row
-      isToday={date === today}
+      isToday={isToday}
       today={today}
       date={date}
       draft={draft}
@@ -337,128 +392,9 @@ function ExtraRowComponent({
       grid={grid}
       row={row}
       status={status}
-      showDraftPill={date !== today && isUntouched}
-      actionsCell={
-        date !== today && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Remove this row"
-            title="Remove this row"
-            onClick={onRemoveExtra}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        )
-      }
+      showDraftPill={!entry && !isToday && isUntouched}
+      actionsCell={actionsCell}
       ariaDate={date}
-    />
-  );
-}
-
-function SavedEntryRow({
-  row,
-  today,
-  entry,
-  grid,
-  onSaveEntry,
-  onDeleteRequest,
-}: {
-  row: number;
-  today: string;
-  entry: AdsetEntry;
-  grid: ReturnType<typeof useGridNavigation>;
-  onSaveEntry: (date: string, values: AdsetEntryInput) => Promise<void>;
-  onDeleteRequest: () => void;
-}) {
-  const [draft, setDraft] = useState<RowDraft>(() => toDraft(entry));
-  const initialRef = useRef<RowDraft>(draft);
-  const [status, setStatus] = useState<SaveStatus>('idle');
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const next = toDraft(entry);
-    initialRef.current = next;
-    setDraft((prev) => ({ ...next, ...dirtyFieldsOnly(prev, initialRef.current) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    entry.spend,
-    entry.clicks,
-    entry.lpv,
-    entry.atc,
-    entry.ic,
-    entry.purchases,
-    entry.date,
-  ]);
-
-  useEffect(
-    () => () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (fadeTimer.current) clearTimeout(fadeTimer.current);
-    },
-    [],
-  );
-
-  const flushSave = async (next: RowDraft) => {
-    setStatus('saving');
-    try {
-      await onSaveEntry(entry.date, buildPayload(next));
-      setStatus('saved');
-      if (fadeTimer.current) clearTimeout(fadeTimer.current);
-      fadeTimer.current = setTimeout(() => setStatus('idle'), 1200);
-    } catch {
-      setStatus('error');
-    }
-  };
-
-  const scheduleSave = (next: RowDraft) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void flushSave(next), 300);
-  };
-
-  const handleChange = (field: EditableField, raw: string) => {
-    const next = { ...draft, [field]: raw };
-    setDraft(next);
-    scheduleSave(next);
-  };
-
-  const handleBlur = () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    void flushSave(draft);
-  };
-
-  const handleEsc = () => setDraft(initialRef.current);
-
-  const isToday = entry.date === today;
-
-  return (
-    <Row
-      isToday={isToday}
-      today={today}
-      date={entry.date}
-      draft={draft}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      onEsc={handleEsc}
-      grid={grid}
-      row={row}
-      status={status}
-      actionsCell={
-        !isToday && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={`Delete entry for ${entry.date}`}
-            onClick={onDeleteRequest}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        )
-      }
-      ariaDate={entry.date}
     />
   );
 }

@@ -25,7 +25,7 @@ export function CollapsibleEntriesTable({
   expanded,
 }: CollapsibleEntriesTableProps) {
   return (
-    <Table className="[&_th]:h-8 [&_td]:py-1">
+    <Table className="[&_th]:h-9 [&_td]:py-2">
       <TableHeader>{header}</TableHeader>
       <TableBody>
         {todayRow}
